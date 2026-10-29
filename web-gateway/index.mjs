@@ -3,7 +3,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
@@ -174,7 +174,16 @@ createServer(async (req, res) => {
         !input.text.trim() || input.text.length > 3900) {
       return json(res, 400, { error: "Invalid message" });
     }
-    const response = await socket.sendMessage(input.groupId, { text: input.text });
+    const quoted = input.quoted === undefined ? undefined
+      : buildQuotedMessage(input.groupId, input.quoted);
+    if (input.quoted !== undefined && !quoted) {
+      return json(res, 400, { error: "Invalid quote reference" });
+    }
+    const response = await socket.sendMessage(
+      input.groupId,
+      { text: input.text },
+      quoted ? { quoted } : undefined
+    );
     if (!response?.key?.id) return json(res, 502, { error: "Send not acknowledged" });
     return json(res, 200, { messageId: response.key.id });
   } catch {

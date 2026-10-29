@@ -14,6 +14,7 @@ const schema = z.object({
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).default("gemini-3.5-flash-lite"),
+  GEMINI_THINKING_LEVEL: z.enum(["minimal", "low", "medium", "high"]).default("minimal"),
   TRANSLATION_PROVIDER: z.enum(["mock", "google", "gemini"]).default("mock"),
   DRY_RUN: z.enum(["true", "false"]).default("true"),
   PORT: z.coerce.number().int().min(1).max(65535).default(9028),

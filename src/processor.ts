@@ -29,6 +29,10 @@ export async function processPending(prisma: PrismaClient, provider: Translation
       }
     });
     if (!claimed.count) continue;
+    const startedAt = Date.now();
+    const queuedMs = Math.max(0, startedAt - msg.createdAt.getTime());
+    let translationMs = 0;
+    let sendMs = 0;
     try {
       if (!msg.group.enabled) {
         await prisma.message.update({ where: { id: msg.id },
@@ -42,6 +46,7 @@ export async function processPending(prisma: PrismaClient, provider: Translation
       let output = msg.outputText;
 
       if (output === null) {
+        const translationStarted = Date.now();
         const results: Record<string, string> = {};
         if (provider.translateBatch) {
           // Gemini does language detection and all translations in ONE request.
@@ -65,17 +70,31 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         }
         output = parts.join("\n\n");
         if (output.length > 3900) throw new Error("Translation exceeds WhatsApp text limit");
+        translationMs = Date.now() - translationStarted;
         await prisma.message.update({
           where: { id: msg.id }, data: { sourceLanguage: source, outputText: output }
         });
       }
-      const sentId = output ? await sendGatewayText(cfg, msg.group.gateway, msg.group.whatsappGroupId, output) : null;
+      const sendStarted = Date.now();
+      const sentId = output ? await sendGatewayText(
+        cfg,
+        msg.group.gateway,
+        msg.group.whatsappGroupId,
+        output,
+        { messageId: msg.externalMessageId, senderId: msg.senderId, text: msg.originalText }
+      ) : null;
+      sendMs = Date.now() - sendStarted;
       await prisma.message.update({
         where: { id: msg.id },
         data: {
           status: MessageStatus.COMPLETED, outboundMessageId: sentId,
           processedAt: new Date(), lastError: null
         }
+      });
+      console.info("Translation job completed", {
+        id: msg.id, gateway: msg.group.gateway,
+        queueDelayMs: queuedMs, translationMs, sendMs,
+        totalMs: Date.now() - msg.createdAt.getTime()
       });
       processed++;
     } catch (error) {

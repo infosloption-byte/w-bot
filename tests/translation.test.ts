@@ -6,45 +6,43 @@ import {
   isLanguage, normalizeLanguageCode, translationTargets
 } from "../src/languages.js";
 
-test("all five required languages are supported and set as defaults", () => {
-  assert.deepEqual(DEFAULT_TARGET_LANGUAGES, ["he", "en", "fil", "si", "ta"]);
+test("Hebrew, English, Sinhala, Uzbek, Russian are five default target languages", () => {
+  assert.deepEqual(DEFAULT_TARGET_LANGUAGES, ["he", "en", "si", "uz", "ru"]);
   for (const language of DEFAULT_TARGET_LANGUAGES) assert.equal(isLanguage(language), true);
-  assert.equal(isLanguage("hi"), false);
+  for (const retired of ["fil", "ta"]) assert.equal(isLanguage(retired), false);
 });
 
-test("mock detector recognizes Hebrew, Sinhala, Tamil and English", () => {
+test("mock detection identifies distinctive scripts, but not Uzbek Latin", () => {
   assert.equal(detectMockLanguage("שלום לכולם"), "he");
   assert.equal(detectMockLanguage("ආයුබෝවන්"), "si");
-  assert.equal(detectMockLanguage("வணக்கம்"), "ta");
+  assert.equal(detectMockLanguage("Привет всем"), "ru");
   assert.equal(detectMockLanguage("Hello everybody"), "en");
+  assert.equal(detectMockLanguage("Assalomu alaykum"), "en");
 });
 
-test("mock mode cannot distinguish English and Filipino using Latin script alone", () => {
-  assert.equal(detectMockLanguage("Kumusta po kayo"), "en");
-});
-
-test("normalize legacy Google and regional language codes", () => {
+test("legacy source language codes still normalize for detection", () => {
   assert.equal(normalizeLanguageCode("iw"), "he");
   assert.equal(normalizeLanguageCode("he-IL"), "he");
   assert.equal(normalizeLanguageCode("tl"), "fil");
-  assert.equal(normalizeLanguageCode("fil-PH"), "fil");
-  assert.equal(normalizeLanguageCode("en-US"), "en");
+  assert.equal(normalizeLanguageCode("uz-UZ"), "uz");
+  assert.equal(normalizeLanguageCode("ru-RU"), "ru");
 });
 
-test("up to five supported targets are retained, normalized, and deduplicated", () => {
-  assert.deepEqual(configuredLanguages(["iw", "en", "tl", "si", "ta", "fil", "zz"]),
-    ["he", "en", "fil", "si", "ta"]);
+test("supported target sets deduplicate and exclude retired translations", () => {
+  assert.deepEqual(configuredLanguages(["iw", "en", "tl", "si", "ru", "uz", "ta", "zz"]),
+    ["he", "en", "si", "ru", "uz"]);
 });
 
 test("translate to four other languages without echoing source", () => {
   assert.deepEqual(translationTargets(DEFAULT_TARGET_LANGUAGES, "iw"),
-    ["en", "fil", "si", "ta"]);
-  assert.deepEqual(translationTargets(DEFAULT_TARGET_LANGUAGES, "tl"),
-    ["he", "en", "si", "ta"]);
-  assert.deepEqual(translationTargets(DEFAULT_TARGET_LANGUAGES, "si"),
-    ["he", "en", "fil", "ta"]);
+    ["en", "si", "uz", "ru"]);
+  assert.deepEqual(translationTargets(DEFAULT_TARGET_LANGUAGES, "ru"),
+    ["he", "en", "si", "uz"]);
+  assert.deepEqual(translationTargets(DEFAULT_TARGET_LANGUAGES, "uz"),
+    ["he", "en", "si", "ru"]);
 });
 
-test("mock output is clearly labeled as not actually translated", async () => {
-  assert.match(await mockProvider().translate("hello", "en", "he"), /^\[MOCK HE — not translated\]/);
+test("mock output is visibly labeled as not translated", async () => {
+  assert.match(await mockProvider().translate("hello", "en", "ru"),
+    /^\[MOCK RU — not translated\]/);
 });

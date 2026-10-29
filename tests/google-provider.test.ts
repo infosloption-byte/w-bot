@@ -41,10 +41,10 @@ test("Google v2 detection and translation use a header key, normalize legacy cod
 
     assert.equal(await provider.detect("שלום"), "he");
     assert.equal(await provider.detect("Kumusta"), "fil");
-    assert.equal(await provider.translate("שלום", "he", "fil"), "Hello & welcome");
+    assert.equal(await provider.translate("שלום", "he", "ru"), "Hello & welcome");
     assert.equal(requests.length, 3);
     assert.equal(requests[2]?.body.get("source"), "he");
-    assert.equal(requests[2]?.body.get("target"), "fil");
+    assert.equal(requests[2]?.body.get("target"), "ru");
     assert.equal(requests[2]?.body.get("format"), "text");
   } finally {
     globalThis.fetch = originalFetch;

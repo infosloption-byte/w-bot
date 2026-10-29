@@ -19,3 +19,21 @@ export function extractLiveMessage(msg, type) {
       body.startsWith("🌐 ")) return null;
   return { groupId, messageId, senderId, text: body };
 }
+
+/**
+ * Reconstitute only the text required by Baileys' quoted-message context.
+ * The API provides the already persisted original message (not an arbitrary destination).
+ */
+export function buildQuotedMessage(groupId, reference) {
+  if (!isGroupJid(groupId) || !reference || typeof reference !== "object") return null;
+  const { messageId, senderId, text } = reference;
+  if (typeof messageId !== "string" || !/^[a-zA-Z0-9_-]{1,191}$/.test(messageId) ||
+      typeof senderId !== "string" || !/^[0-9][0-9:.-]*@(lid|s\.whatsapp\.net)$/.test(senderId) ||
+      typeof text !== "string" || !text.trim() || text.length > 1000) {
+    return null;
+  }
+  return {
+    key: { id: messageId, remoteJid: groupId, participant: senderId, fromMe: false },
+    message: { conversation: text }
+  };
+}

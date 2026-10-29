@@ -32,13 +32,14 @@ export interface TranslationProvider {
 
 export function detectMockLanguage(text: string): string {
   if (/[\u0590-\u05FF]/u.test(text)) return "he";
+  if (/[\u0400-\u04FF]/u.test(text)) return "ru";
   if (/[\u0D80-\u0DFF]/u.test(text)) return "si";
   if (/[\u0B80-\u0BFF]/u.test(text)) return "ta";
   if (/[\u0900-\u097F]/u.test(text)) return "hi";
   if (/[\u4E00-\u9FFF]/u.test(text)) return "zh";
   if (/[\u0600-\u06FF]/u.test(text)) return "ar";
-  // English and Filipino use Latin script; mock mode cannot reliably distinguish them.
-  // Enable Google Cloud Translation for production-quality automatic detection.
+  // Latin-script Uzbek vs English, and Cyrillic Uzbek vs Russian, are ambiguous.
+  // Enable Gemini for reliable multilingual detection.
   return "en";
 }
 
@@ -105,7 +106,7 @@ function googleProvider(key: string): TranslationProvider {
 
 export function createTranslationProvider(config: Config): TranslationProvider {
   if (config.TRANSLATION_PROVIDER === "gemini") {
-    return createGeminiProvider(config.GEMINI_API_KEY!, config.GEMINI_MODEL);
+    return createGeminiProvider(config.GEMINI_API_KEY!, config.GEMINI_MODEL, config.GEMINI_THINKING_LEVEL);
   }
   return config.TRANSLATION_PROVIDER === "google"
     ? googleProvider(config.GOOGLE_TRANSLATE_API_KEY!)

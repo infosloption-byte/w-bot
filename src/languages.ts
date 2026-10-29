@@ -1,15 +1,15 @@
 /**
  * W-Bot's supported languages and their canonical codes.
- * Google Cloud Translation also accepts "iw" (Hebrew) and "tl" (Tagalog).
+ * Legacy source-language codes "iw" (Hebrew) and "tl" (Tagalog) are normalized for detection only.
  */
-export const DEFAULT_TARGET_LANGUAGES = ["he", "en", "fil", "si", "ta"] as const;
+export const DEFAULT_TARGET_LANGUAGES = ["he", "en", "si", "uz", "ru"] as const;
 
 export const LANGUAGE_NAMES: Record<string, string> = {
   he: "Hebrew",
   en: "English",
-  fil: "Filipino (Tagalog)",
   si: "Sinhala",
-  ta: "Tamil"
+  uz: "Uzbek",
+  ru: "Russian"
 };
 
 export function normalizeLanguageCode(value: string): string {

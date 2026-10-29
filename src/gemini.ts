@@ -37,7 +37,7 @@ function parseErrorReason(data: unknown): string {
  * One Gemini API call detects language and translates every requested target.
  * Returned source language is normalized before being persisted to MySQL.
  */
-export function createGeminiProvider(apiKey: string, model: string): TranslationProvider {
+export function createGeminiProvider(apiKey: string, model: string, thinkingLevel: "minimal" | "low" | "medium" | "high" = "minimal"): TranslationProvider {
   async function translateBatch(text: string, targets: string[]): Promise<TranslationBatch> {
     const languages = [...new Set(targets.map(normalizeLanguageCode))];
     if (languages.length === 0 || languages.length > 5 || languages.some(code => !isLanguage(code))) {
@@ -58,7 +58,8 @@ export function createGeminiProvider(apiKey: string, model: string): Translation
           text: [
             "You are a precise multilingual chat translation service.",
             "Detect the primary language of the input message and return its ISO language code.",
-            "Use fil for Filipino/Tagalog, he for Hebrew, en for English, si for Sinhala, and ta for Tamil.",
+            "Use he for Hebrew, en for English, si for Sinhala, uz for Uzbek, and ru for Russian. Detect other source languages normally.",
+            "For Uzbek, use standard Latin-script Uzbek unless the input specifically requires Cyrillic.",
             "Translate the message into every requested target language.",
             "If a target matches the source language, copy the original text unchanged.",
             "Preserve the message meaning, tone, names, addresses, dates, numbers, links, line breaks and emojis.",
@@ -88,7 +89,14 @@ export function createGeminiProvider(apiKey: string, model: string): Translation
           },
           required: ["sourceLanguage", "translations"]
         },
-        maxOutputTokens: 8192
+        // Gemini 3.x supports thinkingLevel; 2.5 Flash/Lite use thinkingBudget instead.
+        // Minimal reasoning reduces unnecessary latency for short translations.
+        thinkingConfig: model.startsWith("gemini-2.5-")
+          ? { thinkingBudget: thinkingLevel === "minimal" ? 0 : 512 }
+          : model.startsWith("gemini-3.")
+            ? { thinkingLevel }
+            : undefined,
+        maxOutputTokens: 4096
       }
     };
 

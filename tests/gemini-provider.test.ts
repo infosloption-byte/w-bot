@@ -20,9 +20,9 @@ function geminiConfig() {
 const sampleTranslations = {
   he: "שלום לכולם",
   en: "Hello everyone",
-  fil: "Kamusta sa lahat",
   si: "සැමට ආයුබෝවන්",
-  ta: "அனைவருக்கும் வணக்கம்"
+  uz: "Hammaga salom",
+  ru: "Всем привет"
 };
 
 test("Gemini sends one structured request and normalizes Hebrew; no key in URL", async () => {
@@ -38,6 +38,7 @@ test("Gemini sends one structured request and normalizes Hebrew; no key in URL",
     assert.equal(headers.get("x-goog-api-key"), "fake-gemini-key");
     const body = JSON.parse(String(init?.body));
     assert.equal(body.generationConfig.responseMimeType, "application/json");
+    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, "minimal");
     assert.deepEqual(body.generationConfig.responseSchema.properties.translations.required,
       [...DEFAULT_TARGET_LANGUAGES]);
     assert.equal(body.contents[0].parts[0].text.includes("שלום לכולם"), true);
@@ -56,7 +57,8 @@ test("Gemini sends one structured request and normalizes Hebrew; no key in URL",
     const batch = await provider.translateBatch("שלום לכולם", [...DEFAULT_TARGET_LANGUAGES]);
     assert.equal(batch.sourceLanguage, "he");
     assert.equal(batch.translations.en, "Hello everyone");
-    assert.equal(batch.translations.fil, "Kamusta sa lahat");
+    assert.equal(batch.translations.uz, "Hammaga salom");
+    assert.equal(batch.translations.ru, "Всем привет");
     assert.equal(count, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
@@ -67,13 +69,13 @@ test("Gemini normalizes Tagalog detection to fil", async () => {
     candidates: [{ finishReason: "STOP", content: { parts: [{
       text: JSON.stringify({
         sourceLanguage: "tl",
-        translations: { en: "Hello", fil: "Kumusta" }
+        translations: { en: "Hello", ru: "Привет" }
       })
     }] } }]
   }), { status: 200 });
   try {
     const provider = createTranslationProvider(geminiConfig());
-    const batch = await provider.translateBatch!("Kumusta", ["en", "fil"]);
+    const batch = await provider.translateBatch!("Kumusta", ["en", "ru"]);
     assert.equal(batch.sourceLanguage, "fil");
     assert.equal(batch.translations.en, "Hello");
   } finally { globalThis.fetch = original; }

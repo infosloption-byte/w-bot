@@ -241,7 +241,7 @@ const timer = setInterval(async () => {
   try { await processPending(prisma, provider, cfg); }
   catch (err) { app.log.error({ err }, "Worker cycle failed"); }
   finally { processing = false; }
-}, 2000);
+}, 500);
 timer.unref();
 
 async function shutdown() {

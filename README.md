@@ -7,7 +7,7 @@ Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud 
 - Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp for the official Meta Groups API.
 - Optional opt-in linked-device Web gateway for ordinary groups, deployed as an isolated Docker service using Baileys. See [dual gateway guide](docs/DUAL_GATEWAYS.md).
 - Group gateway pinning (`OFFICIAL` or `WEB`), strict group allowlist, inbound authentication and duplicate-message protection; no private messages are translated.
-- Five configured languages: Hebrew (`he`), English (`en`), Filipino/Tagalog (`fil`), Sinhala (`si`), and Tamil (`ta`).
+- Five configured languages: Hebrew (`he`), English (`en`), Sinhala (`si`), Uzbek (`uz`), and Russian (`ru`).
 - **Gemini API** for language detection and five-language translation in **one** structured-output API call. Default model: `gemini-3.5-flash-lite`. See [Gemini setup and test](docs/GEMINI_LIGHTSAIL.md). Existing Google Cloud Translation API remains optional via `TRANSLATION_PROVIDER=google` (see [Google guide](docs/GOOGLE_TRANSLATION.md)). Mock provider is retained for offline tests.
 - Persistent messages, duplicate-message protection, automatic retries, and recent-message visibility.
 - Docker deployment suitable for Lightsail; API only bound to 127.0.0.1:9028.
@@ -47,11 +47,11 @@ Without Docker, install with npm install, generate the client with npx prisma ge
 | GET | /api/messages | Bearer ADMIN_API_KEY | Last 50 message records |
 | POST | /api/simulate | Bearer ADMIN_API_KEY | Test without WhatsApp (dry-run only) |
 
-Every new group defaults to the five target languages: `["he","en","fil","si","ta"]`. An admin can configure any subset of one to five supported languages through `targetLanguages`. Older Google response codes `iw` and `tl` are normalized to `he` and `fil` respectively. The worker skips translation into the detected source language and does not reply when no translation is needed. In mock mode results are prefixed MOCK and are *not actual translations*.
+Every new group defaults to the five target languages: `["he","en","si","uz","ru"]`. An admin can configure any subset of one to five supported languages through `targetLanguages`. Older Google detection codes `iw` and `tl` still normalize to `he` and `fil` for source-language identification, but Filipino is no longer an output target. The worker skips translation into the detected source language and does not reply when no translation is needed. In mock mode results are prefixed MOCK and are *not actual translations*.
 
 ## Safety / operational notes
 
-- Mock language detection recognizes Hebrew, Sinhala, Tamil and other distinct scripts, but **cannot reliably distinguish Filipino from English**, both written using Latin letters. Gemini (or Google Cloud Translation) is required for real detection and translations.
+- Mock language detection recognizes Hebrew, Sinhala and Russian scripts, but **cannot reliably distinguish Uzbek Latin from English** or Uzbek Cyrillic from Russian. Gemini (or Google Cloud Translation) is required for real detection and translations.
 - Four translations of a long message can exceed WhatsApp's single-text limit. This MVP currently fails such messages rather than silently truncating them; splitting replies is future work.
 - For real Gemini output **without WhatsApp posting**, use `TRANSLATION_PROVIDER=gemini`, `GEMINI_API_KEY` and `DRY_RUN=true`. Existing messages are not reprocessed automatically after provider switches; send a new simulated message.
 - App webhook secret is distinct from verification token.
@@ -61,3 +61,11 @@ Every new group defaults to the five target languages: `["he","en","fil","si","t
 - Message text currently persists in MySQL. Configure retention/privacy policy before onboarding real groups.
 - No React dashboard or automated group joining is included in this milestone.
 - **Failover limits:** transport outages are isolated; queued messages for a disconnected Web group retry when the Web gateway reconnects. The official API cannot read an ordinary group's messages, so no automatic cross-gateway takeover exists. Groups never silently switch destinations. An administrative explicit group mapping would need verification before any future cross-transport fallback.
+
+## Faster replies and original-message threading
+
+The worker checks for new messages every **500ms** (previously 2000ms). Gemini 3.x requests use `GEMINI_THINKING_LEVEL=minimal` by default to reduce unnecessary reasoning for short messages. AI/network latency still varies; structured batch detection and all translations remain a single Gemini request. The worker logs queue, translation, send and total durations without logging chat text or credentials.
+
+Outgoing messages now use WhatsApp's native **Reply** functionality, quoting the source message on both the Web gateway and the eligible official Meta group gateway. A WhatsApp Web reply uses the original message ID, sender JID (including `@lid`) and source text from MySQL; official replies use a `context.message_id` object.
+
+A database migration updates existing groups using exactly the previous five-language default to `["he","en","si","uz","ru"]`; deliberately customized target lists are not overwritten. Check `/api/groups` after deployment, and update any customized groups through PATCH. New messages use the new settings; previously sent replies are unchanged.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber } from "../validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage } from "../validation.mjs";
 
 test("group IDs are accepted, direct chats and URLs rejected", () => {
   assert.equal(isGroupJid("120363123456789012@g.us"), true);
@@ -38,4 +38,26 @@ test("pairing numbers use country code and digits only", () => {
   assert.equal(isPairingPhoneNumber("0771234567 "), false);
   assert.equal(isPairingPhoneNumber("1234"), false);
   assert.equal(isPairingPhoneNumber("0000000000"), false);
+});
+
+test("quoted replies use the original message key and support WhatsApp LID participants", () => {
+  assert.deepEqual(buildQuotedMessage("120363412606399130@g.us", {
+    messageId: "3EB0F75D24828D089F1AF2",
+    senderId: "99106504601758@lid",
+    text: "Hello everyone, this is a translation test."
+  }), {
+    key: {
+      id: "3EB0F75D24828D089F1AF2",
+      remoteJid: "120363412606399130@g.us",
+      participant: "99106504601758@lid",
+      fromMe: false
+    },
+    message: { conversation: "Hello everyone, this is a translation test." }
+  });
+  assert.equal(buildQuotedMessage("120363412606399130@g.us", {
+    messageId: "abc", senderId: "not-a-jid", text: "Hello"
+  }), null);
+  assert.equal(buildQuotedMessage("120363412606399130@g.us", {
+    messageId: "abc", senderId: "94771234567@s.whatsapp.net", text: "Hello"
+  })?.key.participant, "94771234567@s.whatsapp.net");
 });

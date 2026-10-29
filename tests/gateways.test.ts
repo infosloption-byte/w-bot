@@ -37,11 +37,15 @@ test("web gateway sends to requested existing group with bearer token", async ()
     assert.equal(new Headers(init?.headers).get("authorization"), "Bearer " + "c".repeat(64));
     const data = JSON.parse(String(init?.body));
     assert.equal(data.groupId, "120363123456789012@g.us");
+    assert.deepEqual(data.quoted, {
+      messageId: "ABC123", senderId: "99106504601758@lid", text: "Hello first"
+    });
     return new Response(JSON.stringify({ messageId: "ABCD" }), { status: 200 });
   };
   try {
     assert.equal(await sendGatewayText(cfg({ DRY_RUN: "false" }), "WEB",
-      "120363123456789012@g.us", "Bonjour"), "ABCD");
+      "120363123456789012@g.us", "Bonjour",
+      { messageId: "ABC123", senderId: "99106504601758@lid", text: "Hello first" }), "ABCD");
   } finally { globalThis.fetch = actual; }
 });
 
@@ -58,4 +62,22 @@ test("disconnected gateway is retryable and not silently routed through Meta", a
 
 test("enabled Web gateway requires a strong shared token", () => {
   assert.throws(() => cfg({ WEB_GATEWAY_TOKEN: "short" }), /WEB_GATEWAY_TOKEN/);
+});
+
+test("official replies include original context message ID", async () => {
+  const actual = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const data = JSON.parse(String(init?.body));
+    assert.equal(data.recipient_type, "group");
+    assert.deepEqual(data.context, { message_id: "wamid.original" });
+    return new Response(JSON.stringify({ messages: [{ id: "wamid.response" }] }), { status: 200 });
+  };
+  try {
+    assert.equal(await sendGatewayText(cfg({
+      DRY_RUN: "false",
+      WHATSAPP_ACCESS_TOKEN: "dummy-meta-key",
+      WHATSAPP_PHONE_NUMBER_ID: "123456"
+    }), "OFFICIAL", "official-group-id", "Russian",
+    { messageId: "wamid.original", senderId: "123", text: "Hello" }), "wamid.response");
+  } finally { globalThis.fetch = actual; }
 });

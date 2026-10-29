@@ -17,9 +17,12 @@ test("worker makes one Gemini batch call and posts only four translations in dry
     sourceLanguage: null,
     outputText: null,
     originalText: "שלום לכולם",
+    createdAt: new Date(Date.now() - 20),
+    externalMessageId: "ABC123",
+    senderId: "99106504601758@lid",
     group: {
-      enabled: true, whatsappGroupId: "demo-group",
-      targetLanguages: ["he", "en", "fil", "si", "ta"]
+      enabled: true, gateway: "WEB", whatsappGroupId: "120363412606399130@g.us",
+      targetLanguages: ["he", "en", "si", "uz", "ru"]
     }
   };
   const db = {
@@ -43,9 +46,9 @@ test("worker makes one Gemini batch call and posts only four translations in dry
         translations: {
           he: "שלום לכולם",
           en: "Hello everyone",
-          fil: "Kamusta sa lahat",
           si: "සැමට ආයුබෝවන්",
-          ta: "அனைவருக்கும் வணக்கம்"
+          uz: "Hammaga salom",
+          ru: "Всем привет"
         }
       };
     }
@@ -66,7 +69,7 @@ test("worker makes one Gemini batch call and posts only four translations in dry
   assert.equal(saved.sourceLanguage, "he");
   const output = String(saved.outputText);
   assert.doesNotMatch(output, /🌐 Hebrew/);
-  for (const label of ["English", "Filipino (Tagalog)", "Sinhala", "Tamil"])
+  for (const label of ["English", "Sinhala", "Uzbek", "Russian"])
     assert.match(output, new RegExp("🌐 " + label.replace(/[()]/g, "\\$&")));
   assert.equal(messages.at(-1)?.status, "COMPLETED");
   assert.equal(messages.at(-1)?.outboundMessageId, null);

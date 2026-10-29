@@ -35,7 +35,7 @@ export function extractGroupMessages(payload: unknown): IncomingGroupMessage[] {
   return out.slice(0, 100);
 }
 
-export async function sendGroupText(config: Config, groupId: string, text: string): Promise<string | null> {
+export async function sendGroupText(config: Config, groupId: string, text: string, replyToMessageId?: string): Promise<string | null> {
   if (config.dryRun) return null;
   const response = await fetch(
     "https://graph.facebook.com/" + config.WHATSAPP_GRAPH_VERSION + "/" + config.WHATSAPP_PHONE_NUMBER_ID + "/messages",
@@ -47,6 +47,7 @@ export async function sendGroupText(config: Config, groupId: string, text: strin
       },
       body: JSON.stringify({
         messaging_product: "whatsapp", recipient_type: "group", to: groupId,
+        ...(replyToMessageId ? { context: { message_id: replyToMessageId } } : {}),
         type: "text", text: { preview_url: false, body: text }
       }),
       signal: AbortSignal.timeout(12000)

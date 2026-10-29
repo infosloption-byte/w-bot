@@ -120,7 +120,7 @@ Use an actual JID from `/api/web/groups`:
     curl -sS -X POST http://127.0.0.1:9028/api/groups \
       -H "Authorization: Bearer $WBOT_ADMIN_KEY" \
       -H "Content-Type: application/json" \
-      -d '{"groupId":"ACTUAL_GROUP_ID@g.us","gateway":"web","name":"Pilot Translation Group","enabled":true,"targetLanguages":["he","en","fil","si","ta"]}'
+      -d '{"groupId":"ACTUAL_GROUP_ID@g.us","gateway":"web","name":"Pilot Translation Group","enabled":true,"targetLanguages":["he","en","si","uz","ru"]}'
 
 The existing demo group and official business groups keep their original `OFFICIAL` transport. Group transport cannot be changed implicitly through re-registration; a mismatched update returns 409.
 
@@ -147,3 +147,15 @@ Live `OFFICIAL` delivery separately requires eligible Meta Groups API authorizat
 Keep the endpoint `/internal/web/message` inaccessible via Nginx (only proxy the Meta webhook location). Never expose Web gateway port 9029, MySQL 3306 or the admin API publicly. Group text passes through Gemini and is stored in MySQL; implement consent, deletion/retention controls and data backup protections before real customer deployment.
 
 For production, replace Baileys's multi-file auth with an encrypted credential store and use official APIs where eligible.
+
+## 8. Translation speed and quoted replies
+
+The new language set is **Hebrew / English / Sinhala / Uzbek / Russian**. Existing groups configured with exactly the previous five default languages are updated during `prisma migrate deploy`. Customized sets require manual PATCH through `/api/groups/:groupId`.
+
+The worker polls every 500ms, and Gemini 3.x uses `minimal` thinking by default. Adjust by setting `GEMINI_THINKING_LEVEL=low` if you notice quality problems; `minimal` may trade some accuracy for speed. Logs show `queueDelayMs`, `translationMs`, `sendMs` and `totalMs`, without message contents. A live outgoing translation should **reply/quote the original sender's message**, not send a disconnected standalone post.
+
+When deploying, rebuild both services:
+
+    sudo docker compose --profile web up -d --build
+
+The Web gateway's encrypted linked-device session is held in `wbot_web_auth` and should reconnect without relinking. Never run `down -v`.
