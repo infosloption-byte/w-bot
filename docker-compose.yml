@@ -47,7 +47,7 @@ services:
     build: ./frontend
     restart: unless-stopped
     depends_on: [api]
-    ports: ["127.0.0.1:9031:8080"]
+    ports: ["127.0.0.1:${WBOT_PORTAL_PORT:-9032}:8080"]
     networks: [private]
     security_opt: [no-new-privileges:true]
 
