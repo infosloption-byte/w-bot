@@ -5,6 +5,5 @@ dist
 .env
 .env.*
 !.env.example
-tests
 docs
 *.log
