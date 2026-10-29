@@ -47,7 +47,7 @@ Without Docker, install with npm install, generate the client with npx prisma ge
 | GET | /api/messages | Bearer ADMIN_API_KEY | Last 50 message records |
 | POST | /api/simulate | Bearer ADMIN_API_KEY | Test without WhatsApp (dry-run only) |
 
-Every new group defaults to the five target languages: `["he","en","si","uz","ru"]`. An admin can configure any subset of one to five supported languages through `targetLanguages`. Older Google detection codes `iw` and `tl` still normalize to `he` and `fil` for source-language identification, but Filipino is no longer an output target. The worker skips translation into the detected source language and does not reply when no translation is needed. In mock mode results are prefixed MOCK and are *not actual translations*.
+Every new group defaults to the five target languages: `["he","en","si","uz","ru"]`. An admin can configure any subset of one to five supported languages through `targetLanguages`. Older Google detection codes `iw` and `tl` still normalize to `he` and `fil` for source-language identification, but Filipino is no longer an output target. The worker includes every configured language. When the source language is configured, it copies the original text exactly into that section without retranslating it. In mock mode results are prefixed MOCK and are *not actual translations*.
 
 ## Safety / operational notes
 
@@ -69,3 +69,7 @@ The worker checks for new messages every **500ms** (previously 2000ms). Gemini 3
 Outgoing messages now use WhatsApp's native **Reply** functionality, quoting the source message on both the Web gateway and the eligible official Meta group gateway. A WhatsApp Web reply uses the original message ID, sender JID (including `@lid`) and source text from MySQL; official replies use a `context.message_id` object.
 
 A database migration updates existing groups using exactly the previous five-language default to `["he","en","si","uz","ru"]`; deliberately customized target lists are not overwritten. Check `/api/groups` after deployment, and update any customized groups through PATCH. New messages use the new settings; previously sent replies are unchanged.
+
+## Show all five languages, even when the source matches
+
+Outgoing WhatsApp replies always contain Hebrew, English, Sinhala, Uzbek, and Russian sections. The section matching the detected input language repeats the original text verbatim; all other sections are translated. The native WhatsApp quotation of the original message remains enabled.

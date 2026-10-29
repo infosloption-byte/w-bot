@@ -61,8 +61,10 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         }
 
         const parts: string[] = [];
-        for (const target of translationTargets(langs, source)) {
-          const translated = results[target];
+        // Always include every configured language. When it is the detected
+        // source language, preserve the exact input instead of retranslating.
+        for (const target of langs) {
+          const translated = target === source ? msg.originalText : results[target];
           if (typeof translated !== "string" || !translated.trim()) {
             throw new Error("Translation missing for " + target);
           }

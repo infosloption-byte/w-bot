@@ -159,3 +159,7 @@ When deploying, rebuild both services:
     sudo docker compose --profile web up -d --build
 
 The Web gateway's encrypted linked-device session is held in `wbot_web_auth` and should reconnect without relinking. Never run `down -v`.
+
+## Include the original language in the reply
+
+The outgoing translated reply now displays all five configured languages, even when the original message is already in one of them. For example, Russian input produces Hebrew, English, Sinhala and Uzbek translations plus a Russian section containing the exact original Russian message. The existing WhatsApp quote/reply behavior is unaffected.
