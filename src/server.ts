@@ -57,8 +57,11 @@ app.addHook("onRequest", async (request, reply) => {
 app.setErrorHandler((err, request, reply) => {
   if (err instanceof z.ZodError) return reply.code(400).send({ error: "Invalid request", issues: err.issues });
   request.log.error({ err }, "Request failed");
-  return reply.code(err.statusCode && err.statusCode < 500 ? err.statusCode : 500)
-    .send({ error: err.statusCode && err.statusCode < 500 ? err.message : "Internal server error" });
+  const rawStatus = err instanceof Error && "statusCode" in err && typeof err.statusCode === "number"
+    ? err.statusCode : 500;
+  const statusCode = rawStatus >= 400 && rawStatus < 500 ? rawStatus : 500;
+  const message = statusCode < 500 && err instanceof Error ? err.message : "Internal server error";
+  return reply.code(statusCode).send({ error: message });
 });
 
 app.get("/healthz", async () => ({ ok: true, dryRun: cfg.dryRun, translationProvider: cfg.TRANSLATION_PROVIDER }));
