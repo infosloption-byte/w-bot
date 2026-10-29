@@ -30,9 +30,12 @@ export function mockProvider(): TranslationProvider {
 
 function googleProvider(key: string): TranslationProvider {
   async function request(path: string, params: Record<string, string>): Promise<any> {
-    const response = await fetch("https://translation.googleapis.com/language/translate/v2" + path + "?key=" + encodeURIComponent(key), {
+    const response = await fetch("https://translation.googleapis.com/language/translate/v2" + path, {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-goog-api-key": key
+      },
       body: new URLSearchParams(params),
       signal: AbortSignal.timeout(12000)
     });
