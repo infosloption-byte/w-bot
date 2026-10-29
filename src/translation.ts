@@ -2,6 +2,22 @@ import he from "he";
 import type { Config } from "./config.js";
 import { normalizeLanguageCode } from "./languages.js";
 
+export class GoogleTranslationError extends Error {
+  constructor(
+    public readonly httpStatus: number,
+    public readonly reason: string
+  ) {
+    super("Google Translation HTTP " + httpStatus + " (" + reason + ")");
+    this.name = "GoogleTranslationError";
+  }
+
+  get isPermanentConfigurationError(): boolean {
+    return this.httpStatus === 401
+      || ["API_KEY_INVALID", "API_KEY_SERVICE_BLOCKED", "API_KEY_IP_ADDRESS_BLOCKED",
+          "API_KEY_HTTP_REFERRER_BLOCKED", "SERVICE_DISABLED", "BILLING_DISABLED"].includes(this.reason);
+  }
+}
+
 export interface TranslationProvider {
   detect(text: string): Promise<string>;
   translate(text: string, source: string, target: string): Promise<string>;
@@ -39,7 +55,27 @@ function googleProvider(key: string): TranslationProvider {
       body: new URLSearchParams(params),
       signal: AbortSignal.timeout(12000)
     });
-    if (!response.ok) throw new Error("Google Translation HTTP " + response.status);
+    if (!response.ok) {
+      // Google returns machine-readable error status/reason. Never store its full
+      // response body: it may contain request or credential information.
+      let reason = "UNKNOWN";
+      try {
+        const result = await response.json() as {
+          error?: {
+            status?: string;
+            details?: Array<{ reason?: string }>;
+          };
+        };
+        const detailReason = result.error?.details?.find(
+          detail => typeof detail.reason === "string"
+        )?.reason;
+        const rawReason = detailReason || result.error?.status;
+        if (rawReason && /^[A-Z0-9_]{3,80}$/.test(rawReason)) reason = rawReason;
+      } catch {
+        // Malformed error responses must not hide the original HTTP status.
+      }
+      throw new GoogleTranslationError(response.status, reason);
+    }
     return response.json();
   }
   return {
