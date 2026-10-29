@@ -56,10 +56,10 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
 
   app.post("/portal/api/auth/register", async (request, reply) => {
     if (!requireMutationHeader(request, reply)) return;
-    if (!allowAttempt("register:" + request.ip, 4, 3600_000)) {
+    const data = registration.parse(request.body);
+    if (!allowAttempt("register:" + digest(data.email), 4, 3600_000)) {
       return reply.code(429).send({ error: "Too many signup attempts" });
     }
-    const data = registration.parse(request.body);
     if (!safeCompare(data.inviteCode, cfg.SAAS_SIGNUP_CODE!)) {
       return reply.code(403).send({ error: "Invalid pilot invitation" });
     }
@@ -160,6 +160,22 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     });
     if (!result.count) return reply.code(404).send({ error: "Group not found" });
     return { saved: true };
+  });
+
+  app.delete<{ Params: { id: string } }>("/portal/api/groups/:id", async (request, reply) => {
+    if (!requireMutationHeader(request, reply)) return;
+    const user = await requirePortalAuth(prisma, request, reply);
+    if (!user) return;
+    if (user.role === "VIEWER") return reply.code(403).send({ error: "Read-only membership" });
+
+    // Disconnect only a group owned by this tenant, without deleting the
+    // underlying WhatsApp message history or changing any other workspace.
+    const result = await prisma.group.updateMany({
+      where: { id: request.params.id, tenantId: user.tenantId, gateway: "WEB" },
+      data: { tenantId: null, claimedAt: null, enabled: false }
+    });
+    if (!result.count) return reply.code(404).send({ error: "Group not found" });
+    return { disconnected: true };
   });
 
   app.get("/portal/api/usage", async (request, reply) => {

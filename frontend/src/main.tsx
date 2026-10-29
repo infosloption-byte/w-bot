@@ -125,6 +125,17 @@ function App() {
     finally { setBusy(false); }
   }
 
+  async function disconnectGroup(group: Group) {
+    if (!window.confirm("Disconnect " + group.name + "? Translation will stop for this group. A group admin can activate it again later.")) return;
+    setBusy(true); setError("");
+    try {
+      await api("/groups/" + encodeURIComponent(group.id), { method: "DELETE", headers: { "X-WBot-Request": "1" } });
+      await refresh();
+      report("Group disconnected. No further messages will be processed for this workspace.");
+    } catch (err) { reportError(err); }
+    finally { setBusy(false); }
+  }
+
   async function copyText(value: string) {
     try { await navigator.clipboard.writeText(value); report("Copied to clipboard"); }
     catch { reportError(new Error("Unable to copy. Select and copy the command manually.")); }
@@ -237,7 +248,7 @@ function App() {
                         : [...group.targetLanguages, lang.code]
                     })}>{selected ? "✓ " : "+ "}{lang.name}</button>;
                 })}</div>
-                <div className="group-footer"><div className="muted text-small">Translations reply to the original message.</div>
+                <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => void disconnectGroup(group)}>Disconnect group</button></div>
                   <button type="button" className={"toggle " + (group.enabled ? "is-on" : "")} aria-label={group.enabled ? "Pause group" : "Enable group"} aria-pressed={group.enabled} disabled={busy} onClick={() => void updateGroup(group, { enabled: !group.enabled })}><span/></button></div>
               </section>
             )}</div>

@@ -74,3 +74,5 @@ Meta permission for the intended service, supported API eligibility, account rec
 ## Rollback
 
 If necessary switch back to feature/translation-mvp-lightsail and rebuild the Web and API services. Keep the MySQL data and authentication volume intact. The additional nullable Group columns and new SaaS tables are designed to coexist with the earlier app version.
+
+Customers can disconnect their own group in My Groups. Disconnecting clears workspace ownership, pauses the group, and preserves server-side history. A verified group admin may later activate it for a different workspace. No automated WhatsApp group removal occurs.
