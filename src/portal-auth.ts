@@ -20,7 +20,7 @@ export async function hashPassword(password: string): Promise<string> {
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
   // Match the complete format instead of indexing unchecked split components.
   // This also narrows salt and hash to defined strings under strict TypeScript.
-  const match = /^scrypt\\$([a-f0-9]{32})\\$([a-f0-9]{128})$/.exec(encoded);
+  const match = /^scrypt\$([a-f0-9]{32})\$([a-f0-9]{128})$/.exec(encoded);
   const salt = match?.[1];
   const storedHash = match?.[2];
   if (!salt || !storedHash) return false;
