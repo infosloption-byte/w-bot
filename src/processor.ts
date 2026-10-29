@@ -2,7 +2,7 @@ import { MessageStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
 import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
-import type { TranslationProvider } from "./translation.js";
+import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
 import { sendGroupText } from "./whatsapp.js";
 
 const MAX_ATTEMPTS = 3;
@@ -64,10 +64,12 @@ export async function processPending(prisma: PrismaClient, provider: Translation
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown processing error";
       const attempts = msg.attempts + 1;
+      const permanentlyInvalid = error instanceof GoogleTranslationError
+        && error.isPermanentConfigurationError;
       await prisma.message.update({
         where: { id: msg.id },
         data: {
-          status: attempts >= MAX_ATTEMPTS ? MessageStatus.FAILED : MessageStatus.PENDING,
+          status: permanentlyInvalid || attempts >= MAX_ATTEMPTS ? MessageStatus.FAILED : MessageStatus.PENDING,
           lastError: message.slice(0, 500),
           nextAttemptAt: new Date(Date.now() + Math.min(60_000, 5_000 * 2 ** attempts))
         }
