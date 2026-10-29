@@ -78,6 +78,9 @@ app.get("/webhooks/whatsapp", async (request, reply) => {
 });
 
 async function enqueue(groupId: string, messageId: string, senderId: string, text: string) {
+  // Ignore our own translated group replies (including group webhook echoes).
+  if (text.startsWith("🌐 ")) return false;
+  if (await prisma.message.findFirst({ where: { outboundMessageId: messageId }, select: { id: true } })) return false;
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
   if (!group || !group.enabled) return false; // fail closed: only explicitly registered groups
   const saved = await prisma.message.createMany({
