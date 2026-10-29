@@ -39,3 +39,8 @@ button:focus-visible,input:focus-visible{outline:2px solid #3ce1c0;outline-offse
 
 .danger-action{color:#eaa2a2}
 .danger-action:hover{color:#ffbbbb}
+
+.modal-backdrop{position:fixed;inset:0;z-index:1000;background:#020810ca;display:grid;place-items:center;padding:20px}
+.modal-panel{border:1px solid #35526a;background:#152333;box-shadow:0 24px 80px #0009;border-radius:18px;padding:28px;width:min(100%,480px)}
+.modal-panel h2{font-size:24px}.modal-panel p{font-size:13px}.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:23px;flex-wrap:wrap}
+.danger-button{color:#ffe5e5;background:#ad454e;border-color:#c95d67}

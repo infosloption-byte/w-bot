@@ -54,6 +54,7 @@ function App() {
   const [activation, setActivation] = useState<{ code: string; expiresAt: string } | null>(null);
   const [loginMode, setLoginMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(false);
+  const [pendingDisconnect, setPendingDisconnect] = useState<Group | null>(null);
 
   const refresh = useCallback(async () => {
     const account = await api<Me>("/me");
@@ -126,11 +127,11 @@ function App() {
   }
 
   async function disconnectGroup(group: Group) {
-    if (!window.confirm("Disconnect " + group.name + "? Translation will stop for this group. A group admin can activate it again later.")) return;
     setBusy(true); setError("");
     try {
       await api("/groups/" + encodeURIComponent(group.id), { method: "DELETE", headers: { "X-WBot-Request": "1" } });
       await refresh();
+      setPendingDisconnect(null);
       report("Group disconnected. No further messages will be processed for this workspace.");
     } catch (err) { reportError(err); }
     finally { setBusy(false); }
@@ -248,7 +249,7 @@ function App() {
                         : [...group.targetLanguages, lang.code]
                     })}>{selected ? "✓ " : "+ "}{lang.name}</button>;
                 })}</div>
-                <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => void disconnectGroup(group)}>Disconnect group</button></div>
+                <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => setPendingDisconnect(group)}>Disconnect group</button></div>
                   <button type="button" className={"toggle " + (group.enabled ? "is-on" : "")} aria-label={group.enabled ? "Pause group" : "Enable group"} aria-pressed={group.enabled} disabled={busy} onClick={() => void updateGroup(group, { enabled: !group.enabled })}><span/></button></div>
               </section>
             )}</div>
@@ -279,6 +280,17 @@ function App() {
             <section className="panel details"><div className="detail"><span>Workspace</span><strong>{me.workspace.name}</strong></div><div className="detail"><span>Role</span><strong>{me.workspace.role}</strong></div><div className="detail"><span>Email</span><strong>{me.user.email}</strong></div><div className="detail"><span>Registered groups</span><strong>{groups.length} / {me.limits.groups}</strong></div><div className="detail"><span>Monthly message allowance</span><strong>{me.limits.messagesPerMonth}</strong></div><div className="detail"><span>Bot connection model</span><strong>Shared W-Bot number</strong></div></section>
           </>}
         </main>
+        {pendingDisconnect && <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
+            <div className="eyebrow">DISCONNECT GROUP</div>
+            <h2 id="disconnect-title">Stop translating this group?</h2>
+            <p id="disconnect-description" className="muted">W-Bot will stop replying in <strong>{pendingDisconnect.name}</strong>. Existing history remains protected, and a group administrator can activate the group again later.</p>
+            <div className="modal-actions">
+              <button className="button secondary" disabled={busy} onClick={() => setPendingDisconnect(null)}>Keep connected</button>
+              <button className="button danger-button" disabled={busy} onClick={() => void disconnectGroup(pendingDisconnect)}>{busy ? "Disconnecting…" : "Disconnect group"}</button>
+            </div>
+          </div>
+        </div>}
         <footer className="footer">W-Bot by SL Options · Private technical pilot · WhatsApp Web integration is unofficial</footer>
       </div>
     </div>
