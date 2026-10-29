@@ -7,7 +7,7 @@ Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud 
 - Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp.
 - Explicit group allowlist; unknown groups and private messages are ignored.
 - Five configured languages: Hebrew (`he`), English (`en`), Filipino/Tagalog (`fil`), Sinhala (`si`), and Tamil (`ta`).
-- Mock translation engine for offline tests; Google Cloud Translation API for actual translation.
+- Mock translation engine for offline tests; Google Cloud Translation API for actual translation. Follow [the Google Translation setup guide](docs/GOOGLE_TRANSLATION.md) to enable real translations while keeping WhatsApp dry-run enabled.
 - Persistent messages, duplicate-message protection, automatic retries, and recent-message visibility.
 - Docker deployment suitable for Lightsail; API only bound to 127.0.0.1:9028.
 - Admin API authenticated with Bearer token; dry-run simulation endpoint.
