@@ -7,6 +7,7 @@ import { DEFAULT_TARGET_LANGUAGES, LANGUAGE_NAMES, isLanguage, normalizeLanguage
 import { createTranslationProvider } from "./translation.js";
 import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
+import { isWebGroupId, type GatewayKind } from "./gateways.js";
 
 const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
@@ -26,6 +27,7 @@ const groupSchema = z.object({
   groupId: z.string().min(1).max(191),
   name: z.string().trim().min(1).max(191),
   enabled: z.boolean().default(true),
+  gateway: z.enum(["official", "web"]).default("official"),
   targetLanguages: targets.default([...DEFAULT_TARGET_LANGUAGES])
 }).strict();
 const editGroupSchema = z.object({
@@ -82,12 +84,12 @@ app.get("/webhooks/whatsapp", async (request, reply) => {
   return reply.type("text/plain").send(q["hub.challenge"]);
 });
 
-async function enqueue(groupId: string, messageId: string, senderId: string, text: string) {
+async function enqueue(groupId: string, messageId: string, senderId: string, text: string, gateway: GatewayKind) {
   // Ignore our own translated group replies (including group webhook echoes).
   if (text.startsWith("🌐 ")) return false;
   if (await prisma.message.findFirst({ where: { outboundMessageId: messageId }, select: { id: true } })) return false;
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
-  if (!group || !group.enabled) return false; // fail closed: only explicitly registered groups
+  if (!group || !group.enabled || group.gateway !== gateway) return false; // fail closed: channel-locked allowlist
   const saved = await prisma.message.createMany({
     data: [{ groupId: group.id, externalMessageId: messageId, senderId, originalText: text }],
     skipDuplicates: true
@@ -104,9 +106,70 @@ app.post("/webhooks/whatsapp", async (request, reply) => {
   const messages = extractGroupMessages(request.body);
   let accepted = 0;
   for (const message of messages) {
-    if (await enqueue(message.groupId, message.messageId, message.senderId, message.text)) accepted++;
+    if (await enqueue(message.groupId, message.messageId, message.senderId, message.text, "OFFICIAL")) accepted++;
   }
   return reply.send({ received: true, accepted });
+});
+
+const webIngress = z.object({
+  groupId: z.string().min(1).max(191).refine(isWebGroupId, "Invalid Web group JID"),
+  messageId: z.string().min(1).max(191),
+  senderId: z.string().min(1).max(191),
+  text: z.string().trim().min(1).max(1000)
+}).strict();
+
+// Private Docker-only service-to-service ingress; never proxy this route publicly.
+app.post("/internal/web/message", async (request, reply) => {
+  const header = request.headers.authorization;
+  if (!cfg.webEnabled || !cfg.WEB_GATEWAY_TOKEN ||
+      !safeToken(header?.startsWith("Bearer ") ? header.slice(7) : undefined, cfg.WEB_GATEWAY_TOKEN)) {
+    return reply.code(401).send({ error: "Unauthorized" });
+  }
+  const m = webIngress.parse(request.body);
+  const accepted = await enqueue(m.groupId, m.messageId, m.senderId, m.text, "WEB");
+  return reply.code(202).send({ accepted });
+});
+
+app.get("/api/gateways", async () => {
+  let webStatus: "disabled" | "connected" | "disconnected" | "unreachable" = "disabled";
+  if (cfg.webEnabled && cfg.WEB_GATEWAY_TOKEN) {
+    try {
+      const result = await fetch(cfg.WEB_GATEWAY_URL + "/status", {
+        headers: { authorization: "Bearer " + cfg.WEB_GATEWAY_TOKEN },
+        signal: AbortSignal.timeout(2000)
+      });
+      const body = await result.json() as { connected?: boolean };
+      webStatus = result.ok ? (body.connected === true ? "connected" : "disconnected") : "unreachable";
+    } catch { webStatus = "unreachable"; }
+  }
+  return {
+    official: { configured: Boolean(cfg.WHATSAPP_ACCESS_TOKEN && cfg.WHATSAPP_PHONE_NUMBER_ID) },
+    web: { enabled: cfg.webEnabled, status: webStatus },
+    dryRun: cfg.dryRun,
+    note: "Gateways operate on separate registered groups; automatic cross-group failover is prohibited."
+  };
+});
+
+app.get("/api/web/groups", async (_request, reply) => {
+  if (!cfg.webEnabled || !cfg.WEB_GATEWAY_TOKEN) {
+    return reply.code(503).send({ error: "Web gateway disabled" });
+  }
+  try {
+    const response = await fetch(cfg.WEB_GATEWAY_URL + "/groups", {
+      headers: { authorization: "Bearer " + cfg.WEB_GATEWAY_TOKEN },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!response.ok) return reply.code(503).send({ error: "Web gateway not connected" });
+    const result = await response.json() as { groups?: Array<{ groupId?: string; name?: string }> };
+    return {
+      groups: (result.groups || []).filter(item =>
+        typeof item.groupId === "string" && isWebGroupId(item.groupId) &&
+        typeof item.name === "string"
+      ).map(item => ({ groupId: item.groupId, name: item.name })).slice(0, 300)
+    };
+  } catch {
+    return reply.code(503).send({ error: "Web gateway unavailable" });
+  }
 });
 
 app.get("/api/languages", async () => ({
@@ -121,9 +184,17 @@ app.get("/api/groups", async () => {
 
 app.post("/api/groups", async (request, reply) => {
   const data = groupSchema.parse(request.body);
+  if (data.gateway === "web" && !isWebGroupId(data.groupId)) {
+    return reply.code(400).send({ error: "Web group IDs must end in @g.us" });
+  }
+  const gateway: GatewayKind = data.gateway === "web" ? "WEB" : "OFFICIAL";
+  const existing = await prisma.group.findUnique({ where: { whatsappGroupId: data.groupId } });
+  if (existing && existing.gateway !== gateway) {
+    return reply.code(409).send({ error: "Existing group is locked to a different gateway" });
+  }
   const group = await prisma.group.upsert({
     where: { whatsappGroupId: data.groupId },
-    create: { whatsappGroupId: data.groupId, name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages },
+    create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages },
     update: { name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages }
   });
   return reply.code(201).send({ group });
@@ -157,7 +228,8 @@ app.get("/api/messages", async (request) => {
 app.post("/api/simulate", async (request, reply) => {
   if (!cfg.dryRun) return reply.code(403).send({ error: "Simulation is only enabled in DRY_RUN mode" });
   const data = simulationSchema.parse(request.body);
-  const accepted = await enqueue(data.groupId, data.messageId || randomUUID(), data.senderId, data.text);
+  const accepted = await enqueue(data.groupId, data.messageId || randomUUID(), data.senderId, data.text,
+    (await prisma.group.findUnique({ where: { whatsappGroupId: data.groupId }, select: { gateway: true } }))?.gateway || "OFFICIAL");
   if (!accepted) return reply.code(409).send({ accepted: false, reason: "Unknown/disabled group or duplicate message ID" });
   return reply.code(202).send({ accepted: true, note: "Translation will be processed asynchronously; no WhatsApp message is sent." });
 });

@@ -100,3 +100,8 @@ Back up the MySQL named volume before schema changes. Plan a retention policy, u
 ## Gemini translation on the same server
 
 Follow [GEMINI_LIGHTSAIL.md](GEMINI_LIGHTSAIL.md) to configure `TRANSLATION_PROVIDER=gemini` and your Gemini AI Studio API key. Use `DRY_RUN=true` to keep WhatsApp delivery disabled. The Docker builder now runs unit tests before producing the image. Older Google Cloud Translation error messages do not apply when using Gemini.
+
+
+## Optional group gateways
+
+To run both the official Meta Cloud API gateway and opt-in WhatsApp Web gateway, follow [DUAL_GATEWAYS.md](DUAL_GATEWAYS.md). The Web service uses Docker Compose's `web` profile, so it is **not** started during the normal `docker compose up`. Keep `DRY_RUN=true` while linking and validating group IDs.

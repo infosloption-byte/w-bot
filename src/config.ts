@@ -8,6 +8,9 @@ const schema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v25.0"),
+  WEB_GATEWAY_ENABLED: z.enum(["true", "false"]).default("false"),
+  WEB_GATEWAY_TOKEN: z.string().optional(),
+  WEB_GATEWAY_URL: z.string().url().default("http://web-gateway:9029"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).default("gemini-3.5-flash-lite"),
@@ -27,8 +30,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (cfg.TRANSLATION_PROVIDER === "gemini" && !cfg.GEMINI_API_KEY?.trim()) {
     throw new Error("GEMINI_API_KEY required for gemini provider");
   }
-  if (cfg.DRY_RUN === "false" && (!cfg.WHATSAPP_APP_SECRET || !cfg.WHATSAPP_ACCESS_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
-    throw new Error("Live mode requires WhatsApp app secret, access token, and phone-number ID");
+  if (cfg.WEB_GATEWAY_ENABLED === "true" && (!cfg.WEB_GATEWAY_TOKEN || cfg.WEB_GATEWAY_TOKEN.length < 32)) {
+    throw new Error("WEB_GATEWAY_TOKEN of at least 32 characters required when Web gateway enabled");
   }
-  return { ...cfg, dryRun: cfg.DRY_RUN === "true" };
+  if (cfg.DRY_RUN === "false" && cfg.WEB_GATEWAY_ENABLED !== "true"
+      && (!cfg.WHATSAPP_APP_SECRET || !cfg.WHATSAPP_ACCESS_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
+    throw new Error("Live mode requires an enabled Web gateway or authorized Meta credentials");
+  }
+  return { ...cfg, dryRun: cfg.DRY_RUN === "true", webEnabled: cfg.WEB_GATEWAY_ENABLED === "true" };
 }

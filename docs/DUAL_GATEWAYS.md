@@ -1,0 +1,97 @@
+# W-Bot dual WhatsApp gateways — Lightsail
+
+W-Bot supports two **separate** message transports with the same MySQL group registry and Gemini translation engine.
+
+| Gateway | Code | Group type | Prerequisites |
+| --- | --- | --- | --- |
+| Meta Groups API | `official` | eligible business-created small groups | Meta approved Official Business Account/Groups access and signed webhooks |
+| Linked-device Web | `web` | existing ordinary groups | dedicated account already a member; manually link with QR; explicit opt-in |
+
+**Important:** Baileys is unofficial, not affiliated with WhatsApp, and carries account restriction / disconnection risk. Meta's official Groups API cannot read normal large groups. There is no automatic same-group takeover if Web disconnects. **The other gateway's groups continue working**; Web messages already queued in W-Bot wait for reconnect. We do not clone messages to another group.
+
+## 1. Pull and protect the existing working deployment
+
+    cd /opt/apps/w-bot
+    git switch feature/translation-mvp-lightsail
+    git pull --ff-only origin feature/translation-mvp-lightsail
+    cp .env .env.backup.$(date +%Y%m%d%H%M%S)
+    chmod 600 .env.backup.*
+    nano .env
+
+Keep the current Gemini values. Add exactly one copy of these settings:
+
+    DRY_RUN=true
+    TRANSLATION_PROVIDER=gemini
+    WEB_GATEWAY_ENABLED=true
+    WEB_GATEWAY_TOKEN=GENERATE_SEPARATE_64_CHAR_RANDOM_HEX_TOKEN
+
+Generate a random token with `openssl rand -hex 32` and keep it only in .env. Never post it in chat or GitHub.
+
+## 2. Deploy both optional services
+
+    sudo docker compose --profile web up -d --build
+    sudo docker compose --profile web ps
+    sudo docker compose --profile web logs --tail=80 api
+    curl -fsS http://127.0.0.1:9028/healthz
+    curl -fsS http://127.0.0.1:9028/readyz
+
+The API stays bound to **127.0.0.1:9028**; the Web gateway port **9029** is reachable only within the private Docker network, not from the internet. MySQL is likewise private. The database applies a forward-only migration adding `gateway` to groups (existing groups default to `OFFICIAL`).
+
+### Session pairing
+
+The Web container emits a temporary linked-device QR code into its logs while unpaired:
+
+    sudo docker compose --profile web logs --tail=100 web-gateway
+
+Open **WhatsApp > Linked devices > Link a device** on a dedicated number already participating in your selected groups, then scan the QR. The QR is a **sensitive credential**. Do not screenshot/share it or send the logs to chat while an unexpired QR is visible. Anyone with your session files may control the WhatsApp account; guard the `wbot_web_auth` Docker volume and server backups. The Web gateway keeps auth state there across restarts. Baileys's file-based auth helper is suitable for a pilot, not a hardened multi-user production credential store.
+
+If linked, API gateway status should show `web.status: "connected"`. If the account logs out, relink is required. Avoid deleting the session volume except for an intentionally revoked, backed-up session.
+
+## 3. Identify joined groups
+
+Get your existing admin API key from your own .env and enter it without echoing or pasting:
+
+    read -rsp "Admin API key: " WBOT_ADMIN_KEY
+    echo
+
+List connected Web groups:
+
+    curl -sS http://127.0.0.1:9028/api/web/groups \
+      -H "Authorization: Bearer $WBOT_ADMIN_KEY" | python3 -m json.tool
+
+Web group IDs normally end in `@g.us`. **The Web account must already belong to the group**; the bot does not join via link or scrape arbitrary chats. Ask group participants and admins for informed consent before processing their text using Gemini.
+
+## 4. Register Web group with five-language targets
+
+Use an actual JID from `/api/web/groups`:
+
+    curl -sS -X POST http://127.0.0.1:9028/api/groups \
+      -H "Authorization: Bearer $WBOT_ADMIN_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"groupId":"ACTUAL_GROUP_ID@g.us","gateway":"web","name":"Pilot Translation Group","enabled":true,"targetLanguages":["he","en","fil","si","ta"]}'
+
+The existing demo group and official business groups keep their original `OFFICIAL` transport. Group transport cannot be changed implicitly through re-registration; a mismatched update returns 409.
+
+## 5. Verify and switch to live only when ready
+
+First, send test messages in an opted-in pilot group while `DRY_RUN=true`. They should be ingested, detected and translated in MySQL, but **nothing will be posted**. Inspect /api/messages. Only after reviewing translations, duplicate handling, account risk, and privacy, change `DRY_RUN=false` and restart:
+
+    sudo docker compose --profile web up -d --build
+
+Live `OFFICIAL` delivery separately requires eligible Meta Groups API authorization, an official group ID and WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID. W-Bot retains Meta webhook HMAC signature verification; official and Web groups never share their inbound authentication path.
+
+## 6. Health and outage behavior
+
+    curl -sS http://127.0.0.1:9028/api/gateways \
+      -H "Authorization: Bearer $WBOT_ADMIN_KEY"
+
+- `web.connected` means the linked-device session is online; `official.configured` means credentials exist, **not** that real Meta group access has been approved.
+- If Web goes offline, queued Web group translations are retried on the same gateway. The bot never posts the translation into a different group.
+- Ordinary WhatsApp groups cannot automatically switch to Meta's official Groups API, even when credentials exist.
+- A crash between sending and saving acknowledgement can lead to repeated messages (at-least-once delivery). Improve outbox tracking, rate limits and queue observability before commercial rollout.
+
+## 7. Operational security
+
+Keep the endpoint `/internal/web/message` inaccessible via Nginx (only proxy the Meta webhook location). Never expose Web gateway port 9029, MySQL 3306 or the admin API publicly. Group text passes through Gemini and is stored in MySQL; implement consent, deletion/retention controls and data backup protections before real customer deployment.
+
+For production, replace Baileys's multi-file auth with an encrypted credential store and use official APIs where eligible.

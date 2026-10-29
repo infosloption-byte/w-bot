@@ -4,7 +4,7 @@ import type { Config } from "./config.js";
 import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
 import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
 import { GeminiApiError } from "./gemini.js";
-import { sendGroupText } from "./whatsapp.js";
+import { sendGatewayText, GatewayUnavailableError } from "./gateways.js";
 
 const MAX_ATTEMPTS = 3;
 
@@ -69,7 +69,7 @@ export async function processPending(prisma: PrismaClient, provider: Translation
           where: { id: msg.id }, data: { sourceLanguage: source, outputText: output }
         });
       }
-      const sentId = output ? await sendGroupText(cfg, msg.group.whatsappGroupId, output) : null;
+      const sentId = output ? await sendGatewayText(cfg, msg.group.gateway, msg.group.whatsappGroupId, output) : null;
       await prisma.message.update({
         where: { id: msg.id },
         data: {
@@ -86,9 +86,9 @@ export async function processPending(prisma: PrismaClient, provider: Translation
       await prisma.message.update({
         where: { id: msg.id },
         data: {
-          status: permanentlyInvalid || attempts >= MAX_ATTEMPTS ? MessageStatus.FAILED : MessageStatus.PENDING,
+          status: permanentlyInvalid || (attempts >= MAX_ATTEMPTS && !(error instanceof GatewayUnavailableError)) ? MessageStatus.FAILED : MessageStatus.PENDING,
           lastError: message.slice(0, 500),
-          nextAttemptAt: new Date(Date.now() + Math.min(60_000, 5_000 * 2 ** attempts))
+          nextAttemptAt: new Date(Date.now() + (error instanceof GatewayUnavailableError ? 60_000 : Math.min(60_000, 5_000 * 2 ** attempts)))
         }
       });
       console.error("Message processing failed", { id: msg.id, attempts, error: message });

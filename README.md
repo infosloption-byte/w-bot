@@ -4,8 +4,9 @@ Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud 
 
 ## Current MVP
 
-- Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp.
-- Explicit group allowlist; unknown groups and private messages are ignored.
+- Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp for the official Meta Groups API.
+- Optional opt-in linked-device Web gateway for ordinary groups, deployed as an isolated Docker service using Baileys. See [dual gateway guide](docs/DUAL_GATEWAYS.md).
+- Group gateway pinning (`OFFICIAL` or `WEB`), strict group allowlist, inbound authentication and duplicate-message protection; no private messages are translated.
 - Five configured languages: Hebrew (`he`), English (`en`), Filipino/Tagalog (`fil`), Sinhala (`si`), and Tamil (`ta`).
 - **Gemini API** for language detection and five-language translation in **one** structured-output API call. Default model: `gemini-3.5-flash-lite`. See [Gemini setup and test](docs/GEMINI_LIGHTSAIL.md). Existing Google Cloud Translation API remains optional via `TRANSLATION_PROVIDER=google` (see [Google guide](docs/GOOGLE_TRANSLATION.md)). Mock provider is retained for offline tests.
 - Persistent messages, duplicate-message protection, automatic retries, and recent-message visibility.
@@ -15,9 +16,9 @@ Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud 
 
 ## Important WhatsApp limitation
 
-The **official Meta WhatsApp Groups API** is not available to regular WhatsApp groups. It requires an eligible WhatsApp Official Business Account (OBA), a Cloud API number, and groups within Meta's published small-group limits. This project does **not** install an unauthorized WhatsApp Web bot, and cannot read arbitrary existing WhatsApp groups. Check current eligibility directly with Meta before enabling live mode.
+The **official Meta WhatsApp Groups API** is not available to regular WhatsApp groups. It requires an eligible WhatsApp Official Business Account (OBA), a Cloud API number, and groups within Meta's published small-group limits. For ordinary groups, an optional Baileys Web gateway can be enabled explicitly. Baileys is **unofficial**, is not endorsed by Meta, and can violate WhatsApp terms or lead to account restrictions. We do not attempt stealth, evasion, spam, or automatic joining. A connected, opted-in WhatsApp account can only read groups it already belongs to. Test with a dedicated number and explicit member consent. See [dual gateway guide](docs/DUAL_GATEWAYS.md).
 
-The MVP is **group reply mode**. Private per-member translation, voice/audio, group creation/invite management, admin dashboard, data retention controls, and multi-tenant billing are future work. Only onboard participants who consent to group message processing. Gemini and Google Cloud Translation send translated message content to the selected Google service. Use only with appropriate group consent and data-handling policies.
+The MVP is **group reply mode**, with independently configured official and Web transports. Private per-member translation, voice/audio, group creation/invite management, admin dashboard, data retention controls, and multi-tenant billing are future work. Only onboard participants who consent to group message processing. Gemini and Google Cloud Translation send translated message content to the selected Google service. Use only with appropriate group consent and data-handling policies.
 
 ## Local development
 
@@ -38,6 +39,8 @@ Without Docker, install with npm install, generate the client with npx prisma ge
 | GET | /webhooks/whatsapp | Meta verification token | Webhook challenge |
 | POST | /webhooks/whatsapp | Meta HMAC signature | Ingest group text |
 | GET | /api/languages | Bearer ADMIN_API_KEY | Supported languages and defaults |
+| GET | /api/gateways | Bearer ADMIN_API_KEY | Check gateway configuration and Web connection state |
+| GET | /api/web/groups | Bearer ADMIN_API_KEY | List joined Web groups and their IDs |
 | GET | /api/groups | Bearer ADMIN_API_KEY | List groups |
 | POST | /api/groups | Bearer ADMIN_API_KEY | Create/update group |
 | PATCH | /api/groups/:groupId | Bearer ADMIN_API_KEY | Change group |
@@ -56,4 +59,5 @@ Every new group defaults to the five target languages: `["he","en","fil","si","t
 - Webhook deduplication uses WhatsApp message ID within a group.
 - Worker provides **at-least-once**, not exactly-once, delivery: a crash after successful send but before acknowledgement storage may duplicate a reply. Stronger delivery tracking remains planned.
 - Message text currently persists in MySQL. Configure retention/privacy policy before onboarding real groups.
-- No dashboard or WhatsApp provisioning is included in this milestone.
+- No React dashboard or automated group joining is included in this milestone.
+- **Failover limits:** transport outages are isolated; queued messages for a disconnected Web group retry when the Web gateway reconnects. The official API cannot read an ordinary group's messages, so no automatic cross-gateway takeover exists. Groups never silently switch destinations. An administrative explicit group mapping would need verification before any future cross-transport fallback.

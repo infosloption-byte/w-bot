@@ -7,11 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum GatewayKind {
+  OFFICIAL
+  WEB
+}
+
 model Group {
   id              String    @id @default(cuid()) @db.VarChar(191)
   whatsappGroupId String    @unique @db.VarChar(191)
   name            String    @db.VarChar(191)
   enabled         Boolean   @default(true)
+  gateway         GatewayKind @default(OFFICIAL)
   targetLanguages Json
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
