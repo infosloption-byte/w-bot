@@ -18,11 +18,14 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
-  const parts = encoded.split("$");
-  if (parts.length !== 3 || parts[0] !== "scrypt" ||
-      !/^[a-f0-9]{32}$/.test(parts[1]) || !/^[a-f0-9]{128}$/.test(parts[2])) return false;
-  const result = await scrypt(password, Buffer.from(parts[1], "hex"), 64) as Buffer;
-  return timingSafeEqual(result, Buffer.from(parts[2], "hex"));
+  // Match the complete format instead of indexing unchecked split components.
+  // This also narrows salt and hash to defined strings under strict TypeScript.
+  const match = /^scrypt\\$([a-f0-9]{32})\\$([a-f0-9]{128})$/.exec(encoded);
+  const salt = match?.[1];
+  const storedHash = match?.[2];
+  if (!salt || !storedHash) return false;
+  const result = await scrypt(password, Buffer.from(salt, "hex"), 64) as Buffer;
+  return timingSafeEqual(result, Buffer.from(storedHash, "hex"));
 }
 
 export function sessionCookie(token: string, secure: boolean, maxAge = SESSION_MAX_AGE): string {
