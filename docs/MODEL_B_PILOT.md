@@ -41,6 +41,9 @@ Edit the **existing** .env, retaining all working values. Add:
     SAAS_COOKIE_SECURE=false
     SAAS_MAX_GROUPS=3
     SAAS_MONTHLY_MESSAGES=1000
+    WBOT_PORTAL_PORT=9032
+
+Port 9031 is used by Kandy Ads Admin on the current Lightsail server; W-Bot defaults to port 9032. Confirm the chosen port is free with `sudo ss -ltnp | grep ':9032 '`, and override `WBOT_PORTAL_PORT` if necessary. Do not stop Kandy Ads.
 
 Keep DRY_RUN=false only for your consenting test group. The signup code is an invite-only secret: don't share publicly. SAAS_COOKIE_SECURE=false is allowed only for **private localhost testing over SSH**. Set it true behind public HTTPS.
 
@@ -49,13 +52,15 @@ Build and launch the existing services and the optional dashboard:
     sudo docker compose --profile web --profile portal up -d --build
     sudo docker compose --profile web --profile portal ps
     curl -fsS http://127.0.0.1:9028/readyz
-    curl -fsS http://127.0.0.1:9031/healthz
+    curl -fsS http://127.0.0.1:9032/healthz
 
 The API applies a forward-only Prisma migration. Existing group records stay unclaimed; the original Web session uses the persistent wbot_web_auth volume. Access the portal using SSH port forwarding from your desktop:
 
-    ssh -L 9031:127.0.0.1:9031 ubuntu@YOUR_LIGHTSAIL_PUBLIC_IP
+    ssh -L 9032:127.0.0.1:9032 ubuntu@YOUR_LIGHTSAIL_PUBLIC_IP
 
-Then open http://localhost:9031/portal/ in a browser. Signup uses the secret invitation code. Group activation is done through WhatsApp by a verified group admin, then the group appears under My Groups.
+Run the SSH tunnel on the local computer, not inside the Lightsail SSH session. Use the existing private key: `ssh -i PATH_TO_YOUR_PRIVATE_KEY -N -L 9032:127.0.0.1:9032 ubuntu@YOUR_LIGHTSAIL_PUBLIC_IP`. The private key must never be sent to support or committed to GitHub.
+
+Then open http://localhost:9032/portal/ in a browser. Signup uses the secret invitation code. Group activation is done through WhatsApp by a verified group admin, then the group appears under My Groups.
 
 ## Security and isolation
 
