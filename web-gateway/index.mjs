@@ -3,15 +3,19 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
 const ingressUrl = process.env.API_INGRESS_URL || "http://api:9028/internal/web/message";
 const directory = process.env.WEB_AUTH_DIR || "/data/auth";
 const port = Number(process.env.PORT || "9029");
+const pairingPhone = process.env.WEB_PAIRING_PHONE_NUMBER?.trim() || "";
 if (token.length < 32) throw new Error("WEB_GATEWAY_TOKEN must be at least 32 characters");
 if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("Invalid port");
+if (pairingPhone && !isPairingPhoneNumber(pairingPhone)) {
+  throw new Error("WEB_PAIRING_PHONE_NUMBER must include country code and 8-15 digits only, no + or spaces");
+}
 
 let socket = null;
 let connected = false;
@@ -76,10 +80,25 @@ async function connect() {
     printQRInTerminal: false
   });
   socket = ws;
+  let pairingRequested = false;
   ws.ev.on("creds.update", saveCreds);
   ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
     if (ws !== socket) return; // ignore events from an older socket
-    if (qr) {
+    if (qr && pairingPhone && !ws.authState.creds.registered && !pairingRequested) {
+      // Use phone-number pairing if Docker logs do not render QR graphics.
+      // Baileys requires waiting until the socket emits its connection/QR event.
+      pairingRequested = true;
+      void ws.requestPairingCode(pairingPhone).then(code => {
+        if (ws !== socket) return;
+        console.log("=== W-BOT LINKED-DEVICE PAIRING CODE (PRIVATE) ===");
+        console.log(code);
+        console.log("On the dedicated WhatsApp phone: Linked devices > Link a device > Link with phone number instead.");
+        console.log("Do not share this code or the logs. The pairing code expires.");
+      }).catch(() => {
+        pairingRequested = false;
+        console.error("Could not request WhatsApp pairing code. Check number format, connectivity and retry after reconnect.");
+      });
+    } else if (qr && !pairingPhone) {
       console.log("=== W-BOT LINKED-DEVICE QR (SECRET; DO NOT SHARE) ===");
       qrcode.generate(qr, { small: true });
       console.log("Scan on the dedicated WhatsApp phone: Linked devices > Link a device.");

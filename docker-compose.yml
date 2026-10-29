@@ -33,6 +33,7 @@ services:
     restart: unless-stopped
     environment:
       WEB_GATEWAY_TOKEN: ${WEB_GATEWAY_TOKEN:-}
+      WEB_PAIRING_PHONE_NUMBER: ${WEB_PAIRING_PHONE_NUMBER:-}
       API_INGRESS_URL: http://api:9028/internal/web/message
       WEB_AUTH_DIR: /data/auth
       PORT: "9029"

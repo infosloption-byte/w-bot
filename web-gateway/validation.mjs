@@ -1,3 +1,7 @@
+// Country code required, digits only (WhatsApp pairing code input).
+export const isPairingPhoneNumber = value =>
+  typeof value === "string" && /^[1-9][0-9]{7,14}$/.test(value);
+
 export const isGroupJid = id =>
   typeof id === "string" && /^[0-9][0-9-]{5,}@g\.us$/.test(id);
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isGroupJid, extractLiveMessage } from "../validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber } from "../validation.mjs";
 
 test("group IDs are accepted, direct chats and URLs rejected", () => {
   assert.equal(isGroupJid("120363123456789012@g.us"), true);
@@ -29,4 +29,13 @@ test("handles extended text and ignores non-text", () => {
     ...live, message: { extendedTextMessage: { text: "Hi" } }
   }, "notify")?.text, "Hi");
   assert.equal(extractLiveMessage({ ...live, message: { imageMessage: {} } }, "notify"), null);
+});
+
+test("pairing numbers use country code and digits only", () => {
+  assert.equal(isPairingPhoneNumber("94771234567"), true);
+  assert.equal(isPairingPhoneNumber("447911123456"), true);
+  assert.equal(isPairingPhoneNumber("+94771234567"), false);
+  assert.equal(isPairingPhoneNumber("0771234567 "), false);
+  assert.equal(isPairingPhoneNumber("1234"), false);
+  assert.equal(isPairingPhoneNumber("0000000000"), false);
 });

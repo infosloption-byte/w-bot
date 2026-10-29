@@ -45,6 +45,31 @@ The Web container emits a temporary linked-device QR code into its logs while un
 
 Open **WhatsApp > Linked devices > Link a device** on a dedicated number already participating in your selected groups, then scan the QR. The QR is a **sensitive credential**. Do not screenshot/share it or send the logs to chat while an unexpired QR is visible. Anyone with your session files may control the WhatsApp account; guard the `wbot_web_auth` Docker volume and server backups. The Web gateway keeps auth state there across restarts. Baileys's file-based auth helper is suitable for a pilot, not a hardened multi-user production credential store.
 
+### Alternative pairing when the QR graphic does not appear
+
+The Docker log viewer may display the QR announcement without a usable QR picture. Use Baileys' optional phone-number pairing method instead. **Do this only for a dedicated WhatsApp account you control.**
+
+In the server's `.env`, add its country code and phone number as digits only. For Sri Lankan numbers, remove the initial domestic `0` and prepend `94`:
+
+    WEB_PAIRING_PHONE_NUMBER=94XXXXXXXXX
+
+No plus sign, spaces, hyphens or quotation marks. **Do not post the real number or pairing code to ChatGPT or GitHub.** Keep `DRY_RUN=true`.
+
+Pull the updated code and rebuild **only the Web gateway**:
+
+    git pull --ff-only origin feature/translation-mvp-lightsail
+    sudo docker compose --profile web up -d --build --no-deps web-gateway
+
+View the *private* logs:
+
+    sudo docker compose --profile web logs -f --tail=20 web-gateway
+
+Baileys will print an eight-character pairing code when WhatsApp requests pairing. On the dedicated WhatsApp phone go to **Linked devices > Link a device > Link with phone number instead**, and enter the displayed code promptly. The pairing code is temporary and is a sensitive credential; do not share logs while it appears.
+
+When connected, the session is saved to the existing `wbot_web_auth` Docker volume and will persist across restarts. You may comment out `WEB_PAIRING_PHONE_NUMBER` in `.env` after linking and recreate just the Web service to remove the phone value from its runtime environment.
+
+If the code is rejected or expires, check `/api/gateways` and Web logs. Some Baileys releases can fail during phone-code linking due to WhatsApp changes; as a fallback, leave `WEB_PAIRING_PHONE_NUMBER` empty and try QR pairing from an SSH terminal with a visible QR rendering. Never delete the auth volume casually.
+
 If linked, API gateway status should show `web.status: "connected"`. If the account logs out, relink is required. Avoid deleting the session volume except for an intentionally revoked, backed-up session.
 
 ## 3. Identify joined groups
