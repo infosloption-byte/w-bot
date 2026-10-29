@@ -37,3 +37,15 @@ export function buildQuotedMessage(groupId, reference) {
     message: { conversation: text }
   };
 }
+
+/**
+ * Fail closed on identities we cannot match. Baileys group metadata may expose
+ * both phone-number and LID JIDs depending on WhatsApp rollout.
+ */
+export function isVerifiedGroupAdmin(participants, senderJid) {
+  if (!Array.isArray(participants) || typeof senderJid !== "string") return false;
+  return participants.some(p =>
+    p && ["admin", "superadmin"].includes(p.admin) &&
+    [p.id, p.lid, p.phoneNumber].some(value => value === senderJid)
+  );
+}

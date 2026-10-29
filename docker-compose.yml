@@ -42,6 +42,15 @@ services:
     networks: [private]
     security_opt: [no-new-privileges:true]
 
+  portal:
+    profiles: ["portal"]
+    build: ./frontend
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["127.0.0.1:9031:8080"]
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+
 networks:
   private:
 

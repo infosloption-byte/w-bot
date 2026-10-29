@@ -73,3 +73,7 @@ A database migration updates existing groups using exactly the previous five-lan
 ## Show all five languages, even when the source matches
 
 Outgoing WhatsApp replies always contain Hebrew, English, Sinhala, Uzbek, and Russian sections. The section matching the detected input language repeats the original text verbatim; all other sections are translated. The native WhatsApp quotation of the original message remains enabled.
+
+## Multi-customer Model B pilot
+
+Model B is being developed on the feature/model-b-shared-number-saas branch. Customers register an invite-only workspace, add the shared W-Bot number to a group, and ask an actual WhatsApp group admin to send a one-time activation command. Groups and usage are tenant-scoped, with a separate React dashboard. The existing Baileys session and Gemini translation service remain intact. Read [Model B Pilot](docs/MODEL_B_PILOT.md) before deployment. Baileys remains unofficial and is not an authorized commercial WhatsApp Groups API.

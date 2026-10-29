@@ -8,10 +8,12 @@ import { createTranslationProvider } from "./translation.js";
 import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
 import { isWebGroupId, type GatewayKind } from "./gateways.js";
+import { registerPortalRoutes } from "./portal.js";
 
 const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
 const provider = createTranslationProvider(cfg);
+registerPortalRoutes(app, prisma, cfg);
 
 function safeToken(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -90,6 +92,24 @@ async function enqueue(groupId: string, messageId: string, senderId: string, tex
   if (await prisma.message.findFirst({ where: { outboundMessageId: messageId }, select: { id: true } })) return false;
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
   if (!group || !group.enabled || group.gateway !== gateway) return false; // fail closed: channel-locked allowlist
+  if (group.tenantId) {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const tenantGroups = await prisma.group.findMany({
+      where: { tenantId: group.tenantId },
+      select: { id: true, claimedAt: true }
+    });
+    const windows = tenantGroups.map(g => ({
+      groupId: g.id,
+      createdAt: {
+        gte: g.claimedAt && g.claimedAt > monthStart ? g.claimedAt : monthStart
+      }
+    }));
+    const used = windows.length
+      ? await prisma.message.count({ where: { OR: windows } })
+      : 0;
+    if (used >= cfg.SAAS_MONTHLY_MESSAGES) return false; // quota gate for pilot
+  }
   const saved = await prisma.message.createMany({
     data: [{ groupId: group.id, externalMessageId: messageId, senderId, originalText: text }],
     skipDuplicates: true

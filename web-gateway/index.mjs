@@ -3,7 +3,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
@@ -68,6 +68,44 @@ async function ingress(msg) {
     await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt));
   }
   console.error("Web gateway could not enqueue an incoming message after retries.");
+}
+
+async function activateCustomerGroup(ws, originalMessage, incoming, code) {
+  // Revalidate group membership and admin permissions at activation time.
+  // No claims based solely on a group ID, message text or customer assertion.
+  try {
+    if (!connected || socket !== ws) return;
+    const metadata = await ws.groupMetadata(incoming.groupId);
+    if (!isVerifiedGroupAdmin(metadata.participants, incoming.senderId)) {
+      console.warn("Group activation rejected: command sender not a verified group admin");
+      return;
+    }
+    const target = new URL("/internal/web/activate", ingressUrl).toString();
+    const response = await fetch(target, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + token,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        groupId: incoming.groupId,
+        groupName: String(metadata.subject || "WhatsApp Group").slice(0, 191),
+        messageId: incoming.messageId,
+        senderId: incoming.senderId,
+        code,
+        adminVerified: true
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+    const text = response.ok
+      ? "✅ W-Bot activated for this group. Manage languages and status from your W-Bot dashboard."
+      : "⚠️ W-Bot activation was not completed. Check the code, expiry and group ownership in your dashboard.";
+    // Deliberately do not expose the activation code in replies or logs.
+    await ws.sendMessage(incoming.groupId, { text }, { quoted: originalMessage });
+    console.log(response.ok ? "Customer group activation completed" : "Customer group activation rejected");
+  } catch {
+    console.warn("Group activation could not be verified; try again with a fresh code.");
+  }
 }
 
 async function connect() {
@@ -147,7 +185,13 @@ async function connect() {
   ws.ev.on("messages.upsert", ({ messages, type }) => {
     for (const message of messages) {
       const incoming = extractLiveMessage(message, type);
-      if (incoming) void ingress(incoming);
+      if (!incoming) continue;
+      const command = /^\/wbot\s+connect\s+([A-Fa-f0-9]{16})\s*$/i.exec(incoming.text);
+      if (command) {
+        void activateCustomerGroup(ws, message, incoming, command[1]);
+      } else {
+        void ingress(incoming);
+      }
     }
   });
 }

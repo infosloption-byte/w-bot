@@ -12,9 +12,71 @@ enum GatewayKind {
   WEB
 }
 
+enum MemberRole {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+model PortalUser {
+  id           String       @id @default(cuid()) @db.VarChar(191)
+  email        String       @unique @db.VarChar(191)
+  displayName  String       @db.VarChar(100)
+  passwordHash String       @db.VarChar(255)
+  createdAt    DateTime     @default(now())
+  memberships  TenantMember[]
+  sessions     PortalSession[]
+  activations  GroupActivation[]
+}
+
+model Tenant {
+  id          String            @id @default(cuid()) @db.VarChar(191)
+  name        String            @db.VarChar(191)
+  createdAt   DateTime          @default(now())
+  members     TenantMember[]
+  groups      Group[]
+  activations GroupActivation[]
+}
+
+model TenantMember {
+  tenantId  String       @db.VarChar(191)
+  userId    String       @db.VarChar(191)
+  role      MemberRole   @default(OWNER)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      PortalUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime     @default(now())
+  @@id([tenantId, userId])
+}
+
+model PortalSession {
+  id        String      @id @default(cuid()) @db.VarChar(191)
+  tokenHash String      @unique @db.Char(64)
+  userId    String      @db.VarChar(191)
+  user      PortalUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  @@index([userId, expiresAt])
+}
+
+model GroupActivation {
+  id         String       @id @default(cuid()) @db.VarChar(191)
+  codeHash   String       @unique @db.Char(64)
+  tenantId   String       @db.VarChar(191)
+  createdBy  String       @db.VarChar(191)
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator    PortalUser   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime     @default(now())
+  @@index([tenantId, expiresAt])
+}
+
 model Group {
   id              String    @id @default(cuid()) @db.VarChar(191)
   whatsappGroupId String    @unique @db.VarChar(191)
+  tenantId        String?   @db.VarChar(191)
+  claimedAt       DateTime?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   name            String    @db.VarChar(191)
   enabled         Boolean   @default(true)
   gateway         GatewayKind @default(OFFICIAL)
@@ -22,6 +84,8 @@ model Group {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   messages        Message[]
+
+  @@index([tenantId])
 }
 
 enum MessageStatus {
