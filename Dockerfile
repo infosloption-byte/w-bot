@@ -8,7 +8,8 @@ COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build && npm prune --omit=dev
+COPY tests ./tests
+RUN npm run build && npm test && npm prune --omit=dev
 
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production

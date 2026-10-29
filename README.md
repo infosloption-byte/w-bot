@@ -7,17 +7,17 @@ Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud 
 - Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp.
 - Explicit group allowlist; unknown groups and private messages are ignored.
 - Five configured languages: Hebrew (`he`), English (`en`), Filipino/Tagalog (`fil`), Sinhala (`si`), and Tamil (`ta`).
-- Mock translation engine for offline tests; Google Cloud Translation API for actual translation. Follow [the Google Translation setup guide](docs/GOOGLE_TRANSLATION.md) to enable real translations while keeping WhatsApp dry-run enabled.
+- **Gemini API** for language detection and five-language translation in **one** structured-output API call. Default model: `gemini-3.5-flash-lite`. See [Gemini setup and test](docs/GEMINI_LIGHTSAIL.md). Existing Google Cloud Translation API remains optional via `TRANSLATION_PROVIDER=google` (see [Google guide](docs/GOOGLE_TRANSLATION.md)). Mock provider is retained for offline tests.
 - Persistent messages, duplicate-message protection, automatic retries, and recent-message visibility.
 - Docker deployment suitable for Lightsail; API only bound to 127.0.0.1:9028.
 - Admin API authenticated with Bearer token; dry-run simulation endpoint.
-- Build and unit tests in GitHub Actions.
+- Docker build runs TypeScript compilation and unit tests before image publication. GitHub Actions is also configured (verify CI is enabled for the repository).
 
 ## Important WhatsApp limitation
 
 The **official Meta WhatsApp Groups API** is not available to regular WhatsApp groups. It requires an eligible WhatsApp Official Business Account (OBA), a Cloud API number, and groups within Meta's published small-group limits. This project does **not** install an unauthorized WhatsApp Web bot, and cannot read arbitrary existing WhatsApp groups. Check current eligibility directly with Meta before enabling live mode.
 
-The MVP is **group reply mode**. Private per-member translation, voice/audio, group creation/invite management, admin dashboard, data retention controls, and multi-tenant billing are future work. Only onboard participants who consent to group message processing. Translation sends message content to Google if that provider is enabled.
+The MVP is **group reply mode**. Private per-member translation, voice/audio, group creation/invite management, admin dashboard, data retention controls, and multi-tenant billing are future work. Only onboard participants who consent to group message processing. Gemini and Google Cloud Translation send translated message content to the selected Google service. Use only with appropriate group consent and data-handling policies.
 
 ## Local development
 
@@ -48,9 +48,9 @@ Every new group defaults to the five target languages: `["he","en","fil","si","t
 
 ## Safety / operational notes
 
-- Mock language detection recognizes Hebrew, Sinhala, Tamil and other distinct scripts, but **cannot reliably distinguish Filipino from English**, both written using Latin letters. Google Cloud Translation is required to test real detection and real translations.
-- Four translations of a long message can exceed WhatsApp\'s single-text limit. This MVP currently fails such messages rather than silently truncating them; splitting replies is future work.
-- Use DRY_RUN=true and TRANSLATION_PROVIDER=mock first. To test real language output **without WhatsApp posting**, use TRANSLATION_PROVIDER=google with DRY_RUN=true.
+- Mock language detection recognizes Hebrew, Sinhala, Tamil and other distinct scripts, but **cannot reliably distinguish Filipino from English**, both written using Latin letters. Gemini (or Google Cloud Translation) is required for real detection and translations.
+- Four translations of a long message can exceed WhatsApp's single-text limit. This MVP currently fails such messages rather than silently truncating them; splitting replies is future work.
+- For real Gemini output **without WhatsApp posting**, use `TRANSLATION_PROVIDER=gemini`, `GEMINI_API_KEY` and `DRY_RUN=true`. Existing messages are not reprocessed automatically after provider switches; send a new simulated message.
 - App webhook secret is distinct from verification token.
 - Never expose the admin API publicly without HTTPS, strong authentication and access restrictions; only the webhook needs a public route.
 - Webhook deduplication uses WhatsApp message ID within a group.

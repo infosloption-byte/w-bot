@@ -1,6 +1,7 @@
 import he from "he";
 import type { Config } from "./config.js";
 import { normalizeLanguageCode } from "./languages.js";
+import { createGeminiProvider } from "./gemini.js";
 
 export class GoogleTranslationError extends Error {
   constructor(
@@ -18,7 +19,13 @@ export class GoogleTranslationError extends Error {
   }
 }
 
+export interface TranslationBatch {
+  sourceLanguage: string;
+  translations: Record<string, string>;
+}
+
 export interface TranslationProvider {
+  translateBatch?(text: string, targets: string[]): Promise<TranslationBatch>;
   detect(text: string): Promise<string>;
   translate(text: string, source: string, target: string): Promise<string>;
 }
@@ -97,6 +104,9 @@ function googleProvider(key: string): TranslationProvider {
 }
 
 export function createTranslationProvider(config: Config): TranslationProvider {
+  if (config.TRANSLATION_PROVIDER === "gemini") {
+    return createGeminiProvider(config.GEMINI_API_KEY!, config.GEMINI_MODEL);
+  }
   return config.TRANSLATION_PROVIDER === "google"
     ? googleProvider(config.GOOGLE_TRANSLATE_API_KEY!)
     : mockProvider();

@@ -9,7 +9,9 @@ const schema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v25.0"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
-  TRANSLATION_PROVIDER: z.enum(["mock", "google"]).default("mock"),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).default("gemini-3.5-flash-lite"),
+  TRANSLATION_PROVIDER: z.enum(["mock", "google", "gemini"]).default("mock"),
   DRY_RUN: z.enum(["true", "false"]).default("true"),
   PORT: z.coerce.number().int().min(1).max(65535).default(9028),
   HOST: z.string().default("0.0.0.0")
@@ -21,6 +23,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const cfg = schema.parse(env);
   if (cfg.TRANSLATION_PROVIDER === "google" && !cfg.GOOGLE_TRANSLATE_API_KEY) {
     throw new Error("GOOGLE_TRANSLATE_API_KEY required for google provider");
+  }
+  if (cfg.TRANSLATION_PROVIDER === "gemini" && !cfg.GEMINI_API_KEY?.trim()) {
+    throw new Error("GEMINI_API_KEY required for gemini provider");
   }
   if (cfg.DRY_RUN === "false" && (!cfg.WHATSAPP_APP_SECRET || !cfg.WHATSAPP_ACCESS_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
     throw new Error("Live mode requires WhatsApp app secret, access token, and phone-number ID");

@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
 import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
 import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
+import { GeminiApiError } from "./gemini.js";
 import { sendGroupText } from "./whatsapp.js";
 
 const MAX_ATTEMPTS = 3;
@@ -36,17 +37,33 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         continue;
       }
       const langs = configuredLanguages(msg.group.targetLanguages);
-      const source = normalizeLanguageCode(msg.sourceLanguage || await provider.detect(msg.originalText));
       if (!langs.length) throw new Error("Group has no valid target languages");
-      const targets = translationTargets(langs, source);
+      let source = msg.sourceLanguage ? normalizeLanguageCode(msg.sourceLanguage) : "";
       let output = msg.outputText;
-      if (!output) {
+
+      if (output === null) {
+        const results: Record<string, string> = {};
+        if (provider.translateBatch) {
+          // Gemini does language detection and all translations in ONE request.
+          const batch = await provider.translateBatch(msg.originalText, langs);
+          source = normalizeLanguageCode(batch.sourceLanguage);
+          Object.assign(results, batch.translations);
+        } else {
+          source = source || normalizeLanguageCode(await provider.detect(msg.originalText));
+          for (const target of translationTargets(langs, source)) {
+            results[target] = await provider.translate(msg.originalText, source, target);
+          }
+        }
+
         const parts: string[] = [];
-        for (const target of targets) {
-          const translated = await provider.translate(msg.originalText, source, target);
+        for (const target of translationTargets(langs, source)) {
+          const translated = results[target];
+          if (typeof translated !== "string" || !translated.trim()) {
+            throw new Error("Translation missing for " + target);
+          }
           parts.push("🌐 " + LANGUAGE_NAMES[target] + "\n" + translated);
         }
-        output = parts.length ? parts.join("\n\n") : "";
+        output = parts.join("\n\n");
         if (output.length > 3900) throw new Error("Translation exceeds WhatsApp text limit");
         await prisma.message.update({
           where: { id: msg.id }, data: { sourceLanguage: source, outputText: output }
@@ -64,8 +81,8 @@ export async function processPending(prisma: PrismaClient, provider: Translation
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown processing error";
       const attempts = msg.attempts + 1;
-      const permanentlyInvalid = error instanceof GoogleTranslationError
-        && error.isPermanentConfigurationError;
+      const permanentlyInvalid = (error instanceof GoogleTranslationError
+        || error instanceof GeminiApiError) && error.isPermanentConfigurationError;
       await prisma.message.update({
         where: { id: msg.id },
         data: {

@@ -96,3 +96,7 @@ An ordinary WhatsApp group is not converted into an eligible API group by this a
     docker compose logs --tail=100 api
 
 Back up the MySQL named volume before schema changes. Plan a retention policy, user opt-out, monitoring and dead-letter administration before broad rollout.
+
+## Gemini translation on the same server
+
+Follow [GEMINI_LIGHTSAIL.md](GEMINI_LIGHTSAIL.md) to configure `TRANSLATION_PROVIDER=gemini` and your Gemini AI Studio API key. Use `DRY_RUN=true` to keep WhatsApp delivery disabled. The Docker builder now runs unit tests before producing the image. Older Google Cloud Translation error messages do not apply when using Gemini.
