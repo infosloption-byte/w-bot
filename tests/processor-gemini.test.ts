@@ -40,7 +40,7 @@ test("worker makes one Gemini batch call and posts only four translations in dry
     async translate() { translateCalled++; throw new Error("translate must not be called"); },
     async translateBatch(_text, targets) {
       called++;
-      assert.deepEqual(targets, ["he", "en", "fil", "si", "ta"]);
+      assert.deepEqual(targets, ["he", "en", "si", "uz", "ru"]);
       return {
         sourceLanguage: "he",
         translations: {
