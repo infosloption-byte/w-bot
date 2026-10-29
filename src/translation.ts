@@ -40,7 +40,9 @@ function googleProvider(key: string): TranslationProvider {
       const json = await request("/detect", { q: text });
       const language = json?.data?.detections?.[0]?.[0]?.language;
       if (typeof language !== "string") throw new Error("Language detection returned no language");
-      return language.toLowerCase().split("-")[0];
+      const primaryLanguage = language.toLowerCase().split("-")[0];
+      if (!primaryLanguage) throw new Error("Detected language code is empty");
+      return primaryLanguage;
     },
     async translate(text, source, target) {
       const json = await request("", { q: text, source, target, format: "text" });
