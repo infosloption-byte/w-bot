@@ -1,5 +1,6 @@
 import he from "he";
 import type { Config } from "./config.js";
+import { normalizeLanguageCode } from "./languages.js";
 
 export interface TranslationProvider {
   detect(text: string): Promise<string>;
@@ -7,11 +8,14 @@ export interface TranslationProvider {
 }
 
 export function detectMockLanguage(text: string): string {
+  if (/[\u0590-\u05FF]/u.test(text)) return "he";
   if (/[\u0D80-\u0DFF]/u.test(text)) return "si";
   if (/[\u0B80-\u0BFF]/u.test(text)) return "ta";
   if (/[\u0900-\u097F]/u.test(text)) return "hi";
   if (/[\u4E00-\u9FFF]/u.test(text)) return "zh";
   if (/[\u0600-\u06FF]/u.test(text)) return "ar";
+  // English and Filipino use Latin script; mock mode cannot reliably distinguish them.
+  // Enable Google Cloud Translation for production-quality automatic detection.
   return "en";
 }
 
@@ -42,7 +46,7 @@ function googleProvider(key: string): TranslationProvider {
       if (typeof language !== "string") throw new Error("Language detection returned no language");
       const primaryLanguage = language.toLowerCase().split("-")[0];
       if (!primaryLanguage) throw new Error("Detected language code is empty");
-      return primaryLanguage;
+      return normalizeLanguageCode(primaryLanguage);
     },
     async translate(text, source, target) {
       const json = await request("", { q: text, source, target, format: "text" });

@@ -1,12 +1,12 @@
 # w-bot — Multilingual WhatsApp group translator
 
-Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud API webhooks, detects the source language, translates to up to three group-configured languages, and posts one combined group reply **only if live sending is explicitly enabled**.
+Node.js + Fastify + TypeScript + Prisma + MySQL. Receives signed WhatsApp Cloud API webhooks, detects the source language, translates to up to five group-configured languages, and posts one combined group reply **only if live sending is explicitly enabled**.
 
 ## Current MVP
 
 - Secure GET verification and HMAC-SHA256 POST webhook on /webhooks/whatsapp.
 - Explicit group allowlist; unknown groups and private messages are ignored.
-- English, Sinhala, Tamil, Hindi, Chinese, Arabic, French, German, Japanese, and Spanish.
+- Five configured languages: Hebrew (`he`), English (`en`), Filipino/Tagalog (`fil`), Sinhala (`si`), and Tamil (`ta`).
 - Mock translation engine for offline tests; Google Cloud Translation API for actual translation.
 - Persistent messages, duplicate-message protection, automatic retries, and recent-message visibility.
 - Docker deployment suitable for Lightsail; API only bound to 127.0.0.1:9028.
@@ -37,16 +37,19 @@ Without Docker, install with npm install, generate the client with npx prisma ge
 | GET | /readyz | Public | Database readiness |
 | GET | /webhooks/whatsapp | Meta verification token | Webhook challenge |
 | POST | /webhooks/whatsapp | Meta HMAC signature | Ingest group text |
+| GET | /api/languages | Bearer ADMIN_API_KEY | Supported languages and defaults |
 | GET | /api/groups | Bearer ADMIN_API_KEY | List groups |
 | POST | /api/groups | Bearer ADMIN_API_KEY | Create/update group |
 | PATCH | /api/groups/:groupId | Bearer ADMIN_API_KEY | Change group |
 | GET | /api/messages | Bearer ADMIN_API_KEY | Last 50 message records |
 | POST | /api/simulate | Bearer ADMIN_API_KEY | Test without WhatsApp (dry-run only) |
 
-Each registered group sets its own targetLanguages array, e.g. ["en","si","ta"]. The worker skips translation into the detected source language and does not reply when no translation is needed. In mock mode results are prefixed MOCK and are *not actual translations*.
+Every new group defaults to the five target languages: `["he","en","fil","si","ta"]`. An admin can configure any subset of one to five supported languages through `targetLanguages`. Older Google response codes `iw` and `tl` are normalized to `he` and `fil` respectively. The worker skips translation into the detected source language and does not reply when no translation is needed. In mock mode results are prefixed MOCK and are *not actual translations*.
 
 ## Safety / operational notes
 
+- Mock language detection recognizes Hebrew, Sinhala, Tamil and other distinct scripts, but **cannot reliably distinguish Filipino from English**, both written using Latin letters. Google Cloud Translation is required to test real detection and real translations.
+- Four translations of a long message can exceed WhatsApp\'s single-text limit. This MVP currently fails such messages rather than silently truncating them; splitting replies is future work.
 - Use DRY_RUN=true and TRANSLATION_PROVIDER=mock first. To test real language output **without WhatsApp posting**, use TRANSLATION_PROVIDER=google with DRY_RUN=true.
 - App webhook secret is distinct from verification token.
 - Never expose the admin API publicly without HTTPS, strong authentication and access restrictions; only the webhook needs a public route.

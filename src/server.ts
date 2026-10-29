@@ -3,7 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { loadConfig } from "./config.js";
-import { isLanguage } from "./languages.js";
+import { DEFAULT_TARGET_LANGUAGES, LANGUAGE_NAMES, isLanguage, normalizeLanguageCode } from "./languages.js";
 import { createTranslationProvider } from "./translation.js";
 import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
@@ -18,13 +18,15 @@ function safeToken(given: string | undefined, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const targets = z.array(z.string().refine(isLanguage, "Unsupported language")).min(1).max(3)
+const targets = z.array(
+  z.string().transform(normalizeLanguageCode).refine(isLanguage, "Unsupported language")
+).min(1).max(DEFAULT_TARGET_LANGUAGES.length)
   .refine(v => new Set(v).size === v.length, "Duplicate language");
 const groupSchema = z.object({
   groupId: z.string().min(1).max(191),
   name: z.string().trim().min(1).max(191),
   enabled: z.boolean().default(true),
-  targetLanguages: targets
+  targetLanguages: targets.default([...DEFAULT_TARGET_LANGUAGES])
 }).strict();
 const editGroupSchema = z.object({
   name: z.string().trim().min(1).max(191).optional(),
@@ -106,6 +108,11 @@ app.post("/webhooks/whatsapp", async (request, reply) => {
   }
   return reply.send({ received: true, accepted });
 });
+
+app.get("/api/languages", async () => ({
+  languages: DEFAULT_TARGET_LANGUAGES.map(code => ({ code, name: LANGUAGE_NAMES[code] })),
+  defaultTargetLanguages: [...DEFAULT_TARGET_LANGUAGES]
+}));
 
 app.get("/api/groups", async () => {
   const groups = await prisma.group.findMany({ orderBy: { createdAt: "desc" } });

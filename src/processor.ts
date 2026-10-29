@@ -1,7 +1,7 @@
 import { MessageStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
-import { configuredLanguages, LANGUAGE_NAMES } from "./languages.js";
+import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
 import type { TranslationProvider } from "./translation.js";
 import { sendGroupText } from "./whatsapp.js";
 
@@ -36,13 +36,13 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         continue;
       }
       const langs = configuredLanguages(msg.group.targetLanguages);
-      const source = msg.sourceLanguage || await provider.detect(msg.originalText);
+      const source = normalizeLanguageCode(msg.sourceLanguage || await provider.detect(msg.originalText));
       if (!langs.length) throw new Error("Group has no valid target languages");
+      const targets = translationTargets(langs, source);
       let output = msg.outputText;
       if (!output) {
         const parts: string[] = [];
-        for (const target of langs) {
-          if (source === target) continue;
+        for (const target of targets) {
           const translated = await provider.translate(msg.originalText, source, target);
           parts.push("🌐 " + LANGUAGE_NAMES[target] + "\n" + translated);
         }

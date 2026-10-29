@@ -35,7 +35,7 @@ Set ADMIN_API_KEY in your terminal without pasting it into chat or committing it
     curl -sS -X POST http://127.0.0.1:9028/api/groups \
       -H "Authorization: Bearer $WBOT_ADMIN_KEY" \
       -H "Content-Type: application/json" \
-      -d '{"groupId":"demo-group","name":"Demo translations","targetLanguages":["en","si","ta"]}'
+      -d '{"groupId":"demo-group","name":"Demo translations","targetLanguages":["he","en","fil","si","ta"]}'
 
     curl -sS -X POST http://127.0.0.1:9028/api/simulate \
       -H "Authorization: Bearer $WBOT_ADMIN_KEY" \
@@ -46,7 +46,11 @@ Set ADMIN_API_KEY in your terminal without pasting it into chat or committing it
     curl -sS http://127.0.0.1:9028/api/messages \
       -H "Authorization: Bearer $WBOT_ADMIN_KEY"
 
-Expected: completed message with MOCK-prefixed output in target languages other than English. No WhatsApp message is delivered.
+Expected: completed message with four MOCK-prefixed output sections (Hebrew, Filipino, Sinhala, Tamil). No WhatsApp message is delivered. Mock translation does not translate the text, and Latin-script Filipino will be interpreted as English during mock detection. To test real detection, configure the Google Cloud Translation provider while keeping DRY_RUN=true.
+
+To test script-based Hebrew detection without sending a real message, call the simulation endpoint again using a different message ID and text such as `שלום לכולם`. The result should skip Hebrew and list English, Filipino, Sinhala and Tamil.
+
+For previously created groups, explicitly update their language selection using `PATCH /api/groups/:groupId` and `{"targetLanguages":["he","en","fil","si","ta"]}`; existing database groups are not silently modified on redeploy.
 
 ## 4. Optional public HTTPS webhook
 
