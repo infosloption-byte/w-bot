@@ -41,17 +41,27 @@ async function bodyJson(req) {
 }
 
 async function ingress(msg) {
-  try {
-    const result = await fetch(ingressUrl, {
-      method: "POST",
-      headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-      body: JSON.stringify(msg),
-      signal: AbortSignal.timeout(10000)
-    });
-    if (!result.ok) console.error("Ingress delivery rejected:", result.status);
-  } catch {
-    console.error("Ingress temporarily unavailable. Event may be redelivered by WhatsApp.");
+  // Bounded retry protects against short API restarts. It does not guarantee
+  // durable inbound delivery if the process crashes; add a persistent spool later.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const result = await fetch(ingressUrl, {
+        method: "POST",
+        headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+        body: JSON.stringify(msg),
+        signal: AbortSignal.timeout(10000)
+      });
+      if (result.ok) return;
+      if (result.status === 401 || result.status === 400 || result.status === 403) {
+        console.error("Web gateway ingress configuration rejected:", result.status);
+        return;
+      }
+    } catch {
+      // Retry after a temporary Docker network or API restart.
+    }
+    await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt));
   }
+  console.error("Web gateway could not enqueue an incoming message after retries.");
 }
 
 async function connect() {
