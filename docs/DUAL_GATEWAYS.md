@@ -70,6 +70,33 @@ When connected, the session is saved to the existing `wbot_web_auth` Docker volu
 
 If the code is rejected or expires, check `/api/gateways` and Web logs. Some Baileys releases can fail during phone-code linking due to WhatsApp changes; as a fallback, leave `WEB_PAIRING_PHONE_NUMBER` empty and try QR pairing from an SSH terminal with a visible QR rendering. Never delete the auth volume casually.
 
+### Recovery after WhatsApp reports loggedOut (401)
+
+**Only reset an authentication session that WhatsApp has rejected, not a working linked session.** A successful phone-code pairing can trigger a temporary 515 restart-required event; the Web gateway reconnects after that automatically. A subsequent 401 is different: WhatsApp rejects or revokes the credentials. Baileys documentation recommends re-pairing from fresh authentication state.
+
+1. Check Linked devices on the WhatsApp phone, and revoke any unfamiliar linked device. The temporary code must remain private.
+2. Stop the Web gateway, **not** the whole Docker Compose stack:
+
+       sudo docker compose --profile web stop web-gateway
+
+3. Archive the rejected auth files inside the existing private Docker volume (does not remove the volume, MySQL, or Gemini configuration):
+
+       sudo docker compose --profile web run --rm --no-deps --entrypoint node web-gateway auth-reset.mjs --confirm-reset
+
+4. Use a normal browser identifier rather than a custom one. This is already configured in the updated gateway code. Start fresh:
+
+       sudo docker compose --profile web up -d --build --no-deps web-gateway
+
+5. View pairing code or QR **only on the private SSH terminal**:
+
+       sudo docker compose --profile web logs -f --tail=20 web-gateway
+
+If your phone says **Couldn't link device** after entering a new code, retrying many times can cause account restrictions. Do not attempt to bypass WhatsApp device validation. Some Baileys versions have known pairing-code compatibility problems; you can try QR pairing with the dedicated number instead, or use an approved official Meta group where eligible.
+
+For a QR attempt, comment out \`WEB_PAIRING_PHONE_NUMBER\` in \`.env\`, recreate the Web container, and open its QR display in a private terminal. Never share the live QR or pairing code. If the new attempt also yields 401, stop and report the **disconnect code and whether the phone reported successful pairing**, not the pairing credential itself.
+
+Auth archives remain within the protected Docker volume for investigation; remove old rejected session archives securely according to your retention policy once no longer needed. Avoid deleting the entire volume.
+
 If linked, API gateway status should show `web.status: "connected"`. If the account logs out, relink is required. Avoid deleting the session volume except for an intentionally revoked, backed-up session.
 
 ## 3. Identify joined groups

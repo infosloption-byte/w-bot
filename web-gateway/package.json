@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node index.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "auth:reset": "node auth-reset.mjs --confirm-reset"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "6.7.24",

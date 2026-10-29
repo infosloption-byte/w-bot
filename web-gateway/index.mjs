@@ -22,6 +22,8 @@ let connected = false;
 let reconnectCount = 0;
 let manuallyLoggedOut = false;
 let reconnectTimer = null;
+let lastDisconnectCode = null;
+let lastConnectionPhase = "starting";
 
 function authorized(req) {
   const authorization = req.headers.authorization || "";
@@ -74,15 +76,16 @@ async function connect() {
   const ws = makeWASocket({
     auth: state,
     logger: pino({ level: "silent" }),
-    browser: Browsers.ubuntu("W-Bot Translator"),
+    browser: Browsers.windows("Chrome"),
     markOnlineOnConnect: false,
-    syncFullHistory: false,
-    printQRInTerminal: false
+    syncFullHistory: false
   });
   socket = ws;
+  lastConnectionPhase = ws.authState.creds.registered ? "reconnecting" : "awaiting_pairing";
   let pairingRequested = false;
   ws.ev.on("creds.update", saveCreds);
-  ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
+  ws.ev.on("connection.update", ({ connection, qr, lastDisconnect, isNewLogin }) => {
+    if (isNewLogin) console.log("WhatsApp pairing accepted; persisting credentials and reconnecting if requested.");
     if (ws !== socket) return; // ignore events from an older socket
     if (qr && pairingPhone && !ws.authState.creds.registered && !pairingRequested) {
       // Use phone-number pairing if Docker logs do not render QR graphics.
@@ -105,21 +108,38 @@ async function connect() {
     }
     if (connection === "open") {
       connected = true;
+      manuallyLoggedOut = false;
+      lastDisconnectCode = null;
+      lastConnectionPhase = "connected";
       reconnectCount = 0;
       console.log("W-Bot Web gateway connected.");
     }
     if (connection === "close") {
       connected = false;
       if (socket === ws) socket = null;
-      const code = lastDisconnect?.error?.output?.statusCode;
+      const rawCode = lastDisconnect?.error?.output?.statusCode;
+      const code = typeof rawCode === "number" ? rawCode : null;
+      lastDisconnectCode = code;
+      lastConnectionPhase = "disconnected";
+      console.warn("W-Bot Web gateway disconnected", {
+        code,
+        authRegistered: Boolean(ws.authState?.creds?.registered)
+      });
       if (code === DisconnectReason.loggedOut) {
         manuallyLoggedOut = true;
-        console.error("W-Bot Web gateway logged out; relink manually. Session files are kept.");
+        lastConnectionPhase = "requires_repair";
+        console.error("WhatsApp rejected/revoked the linked session (401). Stop the gateway, archive stale auth with the documented reset command, then request a new pairing code. Do not retry the rejected credentials.");
+        return;
+      }
+      if (code === DisconnectReason.connectionReplaced) {
+        lastConnectionPhase = "replaced";
+        console.error("Session replaced by another Web client (440); stop duplicate connections before restarting.");
         return;
       }
       reconnectCount++;
-      const delayMs = Math.min(60_000, 3000 * 2 ** Math.min(reconnectCount, 4));
-      console.warn("Web gateway disconnected; scheduling reconnect.");
+      const delayMs = code === DisconnectReason.restartRequired
+        ? 1500 : Math.min(60_000, 3000 * 2 ** Math.min(reconnectCount, 4));
+      console.warn("Web gateway will retry connection", { code, delayMs });
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(() => { void connect().catch(() => console.error("Reconnect failed")); }, delayMs);
     }
@@ -135,7 +155,7 @@ async function connect() {
 createServer(async (req, res) => {
   if (!authorized(req)) return json(res, 401, { error: "Unauthorized" });
   if (req.method === "GET" && req.url === "/status") {
-    return json(res, 200, { connected, loggedOut: manuallyLoggedOut });
+    return json(res, 200, { connected, loggedOut: manuallyLoggedOut, disconnectCode: lastDisconnectCode, phase: lastConnectionPhase });
   }
   if (req.method === "GET" && req.url === "/groups") {
     if (!connected || !socket) return json(res, 503, { error: "Disconnected" });
