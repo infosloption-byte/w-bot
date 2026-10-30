@@ -97,3 +97,5 @@ If an outbound send was initiated but the server could not persist the gateway a
     {"action":"mark_delivered"}
 
 Use `{"action":"retry"}` **only after verifying** that WhatsApp did not deliver the original; a retry may create a duplicate message. The operation writes a tenant audit event when applicable. Neither the private admin API nor its key belongs in the customer portal.
+
+For explicit stored-message deletion, pause translation for that group first. The data-deletion endpoint rejects active groups to reduce racing with queued sends. The retention job deletes all message states older than the configured cutoff, including stale pending jobs, in bounded hourly batches.

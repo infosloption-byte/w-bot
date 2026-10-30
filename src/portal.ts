@@ -228,9 +228,10 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     if (user.role === "VIEWER") return reply.code(403).send({ error: "Read-only membership" });
     const group = await prisma.group.findFirst({
       where: { id: request.params.id, tenantId: user.tenantId },
-      select: { id: true, claimedAt: true }
+      select: { id: true, claimedAt: true, enabled: true }
     });
     if (!group?.claimedAt) return reply.code(404).send({ error: "Group not found" });
+    if (group.enabled) return reply.code(409).send({ error: "Pause the group before erasing its stored history" });
     const deleted = await prisma.message.deleteMany({
       where: { groupId: group.id, createdAt: { gte: group.claimedAt } }
     });

@@ -325,7 +325,7 @@ function App() {
           <div className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="history-title" aria-describedby="history-description">
             <div className="eyebrow">DATA PRIVACY</div>
             <h2 id="history-title">Permanently erase message history?</h2>
-            <p id="history-description" className="muted">Delete stored W-Bot translation messages for <strong>{pendingHistoryDelete.name}</strong> since this workspace activated it. This cannot be undone and does not delete messages already sent in WhatsApp.</p>
+            <p id="history-description" className="muted">Delete stored W-Bot translation messages for <strong>{pendingHistoryDelete.name}</strong> since this workspace activated it. Pause the group first. This cannot be undone and does not delete messages already sent in WhatsApp.</p>
             <div className="modal-actions">
               <button className="button secondary" disabled={busy} onClick={() => setPendingHistoryDelete(null)}>Cancel</button>
               <button className="button danger-button" disabled={busy} onClick={() => void deleteGroupHistory(pendingHistoryDelete)}>{busy ? "Deleting…" : "Erase stored history"}</button>

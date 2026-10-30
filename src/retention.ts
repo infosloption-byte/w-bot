@@ -8,7 +8,7 @@ export async function runRetention(prisma: PrismaClient, cfg: Config) {
   const now = new Date();
   const cutoff = new Date(now.getTime() - cfg.MESSAGE_RETENTION_DAYS * 86_400_000);
   const old = await prisma.message.findMany({
-    where: { createdAt: { lt: cutoff }, status: { in: ["COMPLETED","FAILED","DELIVERY_UNCERTAIN"] } },
+    where: { createdAt: { lt: cutoff } },
     select: { id: true }, take: 250
   });
   if (old.length) await prisma.message.deleteMany({ where: { id: { in: old.map(x => x.id) } } });
