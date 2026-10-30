@@ -81,3 +81,20 @@ Meta permission for the intended service, supported API eligibility, account rec
 If necessary switch back to feature/translation-mvp-lightsail and rebuild the Web and API services. Keep the MySQL data and authentication volume intact. The additional nullable Group columns and new SaaS tables are designed to coexist with the earlier app version.
 
 Customers can disconnect their own group in My Groups. Disconnecting clears workspace ownership, pauses the group, and preserves server-side history. A verified group admin may later activate it for a different workspace. No automated WhatsApp group removal occurs.
+
+## Diagnosing a missing group activation command
+
+If /api/web/groups lists the new group but the gateway logs only "W-Bot Web gateway connected", confirm a **new** admin command was sent **after** the gateway restart. Expired or previously sent commands are not replayed. The command must exactly follow `/wbot connect <16-character code>`, sent from a different account than the W-Bot linked number.
+
+For a temporary, privacy-safe inbound diagnostic, add this line to the existing .env:
+
+    WEB_ACTIVATION_DEBUG=true
+
+Then recreate **only** the Web gateway (do not reset the Baileys auth volume):
+
+    sudo docker compose --profile web up -d --no-deps --build web-gateway
+    sudo docker compose --profile web logs --tail=20 -f web-gateway
+
+Generate a new code in the portal and send it from a **verified WhatsApp group admin** to the new group. The gateway prints `W-Bot incoming group event` with only the Baileys event type and a filter reason, **no group IDs, sender JIDs, message content or activation codes**. If the filter is `accepted`, look for `Group activation command received`. If the filter is `from_bot_account`, the command originated from the linked W-Bot account and cannot be accepted. `not_live_notify`, `missing_sender_id` or `non_text_or_unsupported_wrapper` indicate why the current safe message parser didn't handle the event. If no group event appears, WhatsApp did not deliver a compatible new event to this linked device.
+
+Once diagnosed, set `WEB_ACTIVATION_DEBUG=false` and recreate only the Web gateway. Never paste secrets, codes or QR pairing logs into support messages.

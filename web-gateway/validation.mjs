@@ -5,19 +5,36 @@ export const isPairingPhoneNumber = value =>
 export const isGroupJid = id =>
   typeof id === "string" && /^[0-9][0-9-]{5,}@g\.us$/.test(id);
 
+function groupTextFields(msg) {
+  const message = msg?.message?.ephemeralMessage?.message ?? msg?.message;
+  const text = message?.conversation ?? message?.extendedTextMessage?.text;
+  return { groupId: msg?.key?.remoteJid, messageId: msg?.key?.id,
+    senderId: msg?.key?.participant, text };
+}
+
+/**
+ * Diagnostic reasons contain no message content, sender identity, or group ID.
+ * In particular, an activation command from a different device must not bypass
+ * the notify/fromMe checks merely because diagnostics are turned on.
+ */
+export function diagnoseIncomingGroupMessage(msg, type) {
+  if (!msg || !isGroupJid(msg.key?.remoteJid)) return "not_group";
+  if (msg.key?.fromMe === true) return "from_bot_account";
+  if (type !== "notify") return "not_live_notify";
+  const { messageId, senderId, text } = groupTextFields(msg);
+  if (typeof messageId !== "string" || !messageId || messageId.length > 191) return "missing_message_id";
+  if (typeof senderId !== "string" || !senderId || senderId.length > 191) return "missing_sender_id";
+  if (typeof text !== "string") return "non_text_or_unsupported_wrapper";
+  if (!text.trim() || text.length > 1000) return "empty_or_oversize_text";
+  if (text.startsWith("🌐 ")) return "translation_echo";
+  return "accepted";
+}
+
 export function extractLiveMessage(msg, type) {
-  if (type !== "notify" || !msg || msg.key?.fromMe === true) return null;
-  const groupId = msg.key?.remoteJid;
-  if (!isGroupJid(groupId)) return null;
-  const messageId = msg.key?.id;
-  const senderId = msg.key?.participant;
-  const message = msg.message?.ephemeralMessage?.message ?? msg.message;
-  const body = message?.conversation ?? message?.extendedTextMessage?.text;
-  if (typeof messageId !== "string" || !messageId || messageId.length > 191 ||
-      typeof senderId !== "string" || !senderId || senderId.length > 191 ||
-      typeof body !== "string" || !body.trim() || body.length > 1000 ||
-      body.startsWith("🌐 ")) return null;
-  return { groupId, messageId, senderId, text: body };
+  if (diagnoseIncomingGroupMessage(msg, type) !== "accepted") return null;
+  const { groupId, messageId, senderId, text } = groupTextFields(msg);
+  // All four fields were checked by diagnoseIncomingGroupMessage.
+  return { groupId, messageId, senderId, text };
 }
 
 /**

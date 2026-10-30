@@ -3,7 +3,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand, diagnoseIncomingGroupMessage } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
@@ -11,6 +11,7 @@ const ingressUrl = process.env.API_INGRESS_URL || "http://api:9028/internal/web/
 const directory = process.env.WEB_AUTH_DIR || "/data/auth";
 const port = Number(process.env.PORT || "9029");
 const pairingPhone = process.env.WEB_PAIRING_PHONE_NUMBER?.trim() || "";
+const activationDebug = process.env.WEB_ACTIVATION_DEBUG === "true";
 if (token.length < 32) throw new Error("WEB_GATEWAY_TOKEN must be at least 32 characters");
 if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("Invalid port");
 if (pairingPhone && !isPairingPhoneNumber(pairingPhone)) {
@@ -219,6 +220,13 @@ async function connect() {
   });
   ws.ev.on("messages.upsert", ({ messages, type }) => {
     for (const message of messages) {
+      if (activationDebug && isGroupJid(message?.key?.remoteJid)) {
+        // Never log group IDs, participant IDs, message text or activation codes.
+        console.info("W-Bot incoming group event", {
+          type,
+          filter: diagnoseIncomingGroupMessage(message, type)
+        });
+      }
       const incoming = extractLiveMessage(message, type);
       if (!incoming) continue;
       const command = parseActivationCommand(incoming.text);
