@@ -200,3 +200,39 @@ test("worker renders a sixth enabled language and skips disabled targets", async
   assert.ok(output.includes("🌐 French\nBonjour"));
   assert.equal(output.includes("🌐 Spanish"),false);
 });
+
+test("read-only platform staff cannot add or enable languages", async () => {
+  const db = {
+    platformSession: { findUnique: async () => ({
+      ...platformAdmin, admin: { ...platformAdmin.admin, role: "VIEWER" }
+    }) }
+  } as unknown as PrismaClient;
+  const app = Fastify(); registerPlatformRoutes(app, db, cfg);
+  const post = await app.inject({
+    method: "POST", url: "/portal/api/platform/languages",
+    headers: mutationHeaders, payload: { code: "fa", name: "Persian", enabled: true }
+  });
+  const patch = await app.inject({
+    method: "PATCH", url: "/portal/api/platform/languages/fr",
+    headers: mutationHeaders, payload: { enabled: true }
+  });
+  assert.equal(post.statusCode, 403);
+  assert.equal(patch.statusCode, 403);
+  await app.close();
+});
+
+test("catalog migration preserves original defaults and adds disabled presets", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const sql = readFileSync(fileURLToPath(new URL(
+    "../prisma/migrations/20261030000300_language_catalog/migration.sql",
+    import.meta.url)), "utf8");
+  for (const entry of [
+    "('he','Hebrew',TRUE", "('en','English',TRUE",
+    "('si','Sinhala',TRUE", "('uz','Uzbek',TRUE",
+    "('ru','Russian',TRUE"
+  ]) assert.ok(sql.includes(entry), entry);
+  assert.ok(sql.includes("('fr','French',FALSE"));
+  assert.ok(sql.includes("CREATE TABLE"));
+  assert.ok(!sql.includes("DROP TABLE"));
+});
