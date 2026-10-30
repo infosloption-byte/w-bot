@@ -93,3 +93,7 @@ The Platform Admin **Languages** module manages which translation targets custom
 ## Responsive Customer and Platform Admin Portals
 
 Both portals support desktop collapsed/expanded sidebars (saved separately), off-canvas touch-friendly mobile/tablet navigation, adaptive group cards and forms, mobile-friendly labeled Platform Admin tables, accessible keyboard navigation and viewport-safe dialogs. Portal builds include responsive contract tests. See [Responsive portal rollout and device QA](docs/RESPONSIVE_PORTALS.md). No API/database or WhatsApp gateway changes are required.
+
+## Custom domain and HTTPS
+
+W-Bot can be published under `wbot.sloptions.xyz` using the existing Lightsail Nginx reverse proxy with Let's Encrypt TLS, preserving private Docker ports. The host configuration includes an independent HTTP Basic Auth gate on the Platform Admin UI **and** its API endpoints. See [DNS, Nginx, TLS and security rollout](docs/PUBLIC_DOMAIN.md). Domain/DNS/certificate changes are not automatically applied by GitHub.
