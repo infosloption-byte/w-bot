@@ -3,7 +3,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
@@ -70,16 +70,45 @@ async function ingress(msg) {
   console.error("Web gateway could not enqueue an incoming message after retries.");
 }
 
+async function resolveSenderJids(ws, originalMessage) {
+  const identifiers = new Set(senderJidCandidates(originalMessage));
+  // Baileys 6.x may not include a PN/LID alternate in a message key.
+  // Use its cached mapping only if available; never guess a phone number.
+  const mapping = ws.signalRepository?.lidMapping;
+  if (mapping) {
+    for (const id of [...identifiers]) {
+      try {
+        const lookup = id.endsWith("@lid") ? mapping.getPNForLID : mapping.getLIDForPN;
+        if (typeof lookup !== "function") continue;
+        const alternate = await lookup.call(mapping, id);
+        if (typeof alternate === "string" && senderJidCandidates({
+          key: { participant: alternate }
+        }).length) identifiers.add(alternate);
+      } catch { /* unavailable local mapping: fail closed */ }
+    }
+  }
+  return [...identifiers];
+}
+
 async function activateCustomerGroup(ws, originalMessage, incoming, code) {
-  // Revalidate group membership and admin permissions at activation time.
-  // No claims based solely on a group ID, message text or customer assertion.
+  // Only a group admin verified against fresh WhatsApp metadata may claim.
+  // The command alone is never proof of ownership.
   try {
-    if (!connected || socket !== ws) return;
-    const metadata = await ws.groupMetadata(incoming.groupId);
-    if (!isVerifiedGroupAdmin(metadata.participants, incoming.senderId)) {
-      console.warn("Group activation rejected: command sender not a verified group admin");
+    if (!connected || socket !== ws) {
+      console.warn("Group activation unavailable: Web gateway is disconnected");
       return;
     }
+    const metadata = await ws.groupMetadata(incoming.groupId);
+    const senderIds = await resolveSenderJids(ws, originalMessage);
+    if (!isVerifiedGroupAdmin(metadata.participants, senderIds)) {
+      console.warn("Group activation denied: sender not matched to a current group admin", {
+        senderIdentityFormats: senderIds.map(x => x.endsWith("@lid") ? "lid" : "pn"),
+        groupAddressingMode: metadata.addressingMode ?? "unknown",
+        participants: metadata.participants?.length ?? 0
+      });
+      return;
+    }
+    console.info("Group activation: sender verified as WhatsApp group admin");
     const target = new URL("/internal/web/activate", ingressUrl).toString();
     const response = await fetch(target, {
       method: "POST",
@@ -97,14 +126,20 @@ async function activateCustomerGroup(ws, originalMessage, incoming, code) {
       }),
       signal: AbortSignal.timeout(10000)
     });
+    console.info("Group activation: API status", response.status);
     const text = response.ok
       ? "✅ W-Bot activated for this group. Manage languages and status from your W-Bot dashboard."
       : "⚠️ W-Bot activation was not completed. Check the code, expiry and group ownership in your dashboard.";
-    // Deliberately do not expose the activation code in replies or logs.
-    await ws.sendMessage(incoming.groupId, { text }, { quoted: originalMessage });
-    console.log(response.ok ? "Customer group activation completed" : "Customer group activation rejected");
-  } catch {
-    console.warn("Group activation could not be verified; try again with a fresh code.");
+    try {
+      await ws.sendMessage(incoming.groupId, { text }, { quoted: originalMessage });
+    } catch {
+      console.warn("Group activation result could not be sent to WhatsApp group");
+    }
+    console.info(response.ok ? "Customer group activation completed" : "Customer group activation rejected");
+  } catch (error) {
+    // Error details from WhatsApp/HTTP can contain private identifiers or tokens.
+    const stage = error?.name === "TimeoutError" ? "TIMEOUT" : "METADATA_OR_NETWORK";
+    console.warn("Group activation failed:", stage);
   }
 }
 
@@ -186,9 +221,12 @@ async function connect() {
     for (const message of messages) {
       const incoming = extractLiveMessage(message, type);
       if (!incoming) continue;
-      const command = /^\/wbot\s+connect\s+([A-Fa-f0-9]{16})\s*$/i.exec(incoming.text);
+      const command = parseActivationCommand(incoming.text);
       if (command) {
-        void activateCustomerGroup(ws, message, incoming, command[1]);
+        console.info("Group activation command received");
+        void activateCustomerGroup(ws, message, incoming, command);
+      } else if (/^\/wbot\s+connect\b/i.test(incoming.text.trim())) {
+        console.warn("Group activation command ignored: invalid syntax or code length");
       } else {
         void ingress(incoming);
       }

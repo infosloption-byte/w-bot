@@ -42,10 +42,40 @@ export function buildQuotedMessage(groupId, reference) {
  * Fail closed on identities we cannot match. Baileys group metadata may expose
  * both phone-number and LID JIDs depending on WhatsApp rollout.
  */
-export function isVerifiedGroupAdmin(participants, senderJid) {
-  if (!Array.isArray(participants) || typeof senderJid !== "string") return false;
-  return participants.some(p =>
-    p && ["admin", "superadmin"].includes(p.admin) &&
-    [p.id, p.lid, p.phoneNumber].some(value => value === senderJid)
-  );
+// Match identities from the authenticated WhatsApp message key against fresh
+// group metadata; never treat a user-supplied number or command text as identity.
+// Baileys may represent the same sender by a PN JID or an LID JID.
+export function senderJidCandidates(message) {
+  const key = message?.key;
+  const values = [key?.participant, key?.participantAlt];
+  return [...new Set(values.filter(value => typeof value === "string"
+    && /^[0-9][0-9:.-]*@(lid|s\.whatsapp\.net)$/.test(value)))];
+}
+
+function normalizedJid(value) {
+  if (typeof value !== "string") return null;
+  const match = /^([0-9]+)(?::[0-9]+)?@(lid|s\.whatsapp\.net)$/.exec(value);
+  return match ? match[1] + "@" + match[2] : null;
+}
+
+export function isVerifiedGroupAdmin(participants, senderJids) {
+  if (!Array.isArray(participants)) return false;
+  const list = typeof senderJids === "string" ? [senderJids] : senderJids;
+  if (!Array.isArray(list)) return false;
+  const candidates = new Set(list.map(normalizedJid).filter(Boolean));
+  if (!candidates.size) return false;
+  return participants.some(participant => {
+    const isAdmin = participant && (
+      participant.admin === "admin" || participant.admin === "superadmin" ||
+      participant.isAdmin === true || participant.isSuperAdmin === true
+    );
+    return Boolean(isAdmin && [participant.id, participant.lid, participant.phoneNumber]
+      .map(normalizedJid).some(jid => jid && candidates.has(jid)));
+  });
+}
+
+export function parseActivationCommand(text) {
+  if (typeof text !== "string") return null;
+  const match = /^\/wbot\s+connect\s+([A-Fa-f0-9]{16})\s*$/i.exec(text.trim());
+  return match ? match[1].toUpperCase() : null;
 }
