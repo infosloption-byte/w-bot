@@ -1,0 +1,15 @@
+{
+  "name": "w-bot-by-on-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "pino": "^9.9.0",
+    "qrcode": "1.5.4"
+  }
+}

@@ -392,9 +392,9 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
         const claim = await tx.groupActivation.findUnique({
           where: { codeHash: digest(command.code.toUpperCase()) }
         });
-        if (!claim || claim.consumedAt || claim.expiresAt <= now) return null;
+        if (!claim || claim.connectionId || claim.consumedAt || claim.expiresAt <= now) return null;
         const existing = await tx.group.findUnique({
-          where: { whatsappGroupId: command.groupId }
+          where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: command.groupId } }
         });
         // A group may never be silently moved between customer workspaces.
         if (existing && (existing.gateway !== "WEB" ||

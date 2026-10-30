@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
+import { registerByonPlatformRoutes } from "./byon-platform.js";
 import { isValidLanguageCode } from "./languages.js";
 import {
   allowAttempt, digest, hashPassword, verifyPassword, requireMutationHeader
@@ -48,7 +49,7 @@ function fromCookies(req: FastifyRequest): string | null {
     .find(x => x.startsWith(COOKIE + "="))?.slice(COOKIE.length + 1);
   return val && /^[a-zA-Z0-9_-]{40,100}$/.test(val) ? val : null;
 }
-async function adminIdentity(
+export async function adminIdentity(
   prisma: PrismaClient, req: FastifyRequest, reply: FastifyReply
 ) {
   const session = fromCookies(req);
@@ -62,7 +63,7 @@ async function adminIdentity(
   }
   return record.admin;
 }
-function requiredSuperAdmin(
+export function requiredSuperAdmin(
   admin: { role: string }, reply: FastifyReply
 ): boolean {
   if (admin.role === "SUPER_ADMIN") return true;
@@ -82,6 +83,7 @@ async function createPlatformSession(prisma: PrismaClient, adminId: string): Pro
 
 export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClient, cfg: Config) {
   if (!cfg.saasEnabled) return;
+  registerByonPlatformRoutes(app, prisma, cfg);
 
   app.post("/portal/api/platform/auth/login", async (req, reply) => {
     if (!requireMutationHeader(req, reply)) return;

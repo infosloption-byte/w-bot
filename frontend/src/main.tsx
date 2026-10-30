@@ -4,8 +4,10 @@ import "./style.css";
 import "./responsive.css";
 import { useSidebar } from "./useSidebar.js";
 import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
+import { ByonConnections } from "./ByonConnections.js";
+import "./connections.css";
 
-type View = "overview" | "groups" | "activate" | "settings" | "activity";
+type View = "overview" | "groups" | "activate" | "connections" | "settings" | "activity";
 type Group = {
   id: string; name: string; whatsappGroupId: string;
   enabled: boolean; gateway: "WEB" | "OFFICIAL";
@@ -221,6 +223,7 @@ function App() {
     { id: "overview", label: "Overview", icon: "▦" },
     { id: "groups", label: "My Groups", icon: "☰" },
     { id: "activate", label: "Add Group", icon: "+" },
+    { id: "connections", label: "WhatsApp Numbers", icon: "♧" },
     { id: "settings", label: "Workspace", icon: "⚙" },
     { id: "activity", label: "Activity & Plan", icon: "◷" }
   ];
@@ -358,6 +361,14 @@ function App() {
           {view === "settings" && <>
             <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Workspace settings</h1><p className="muted">Your account and shared bot configuration.</p></div></div>
             <AccountSettings me={me} onRefresh={refresh} onLogout={logout}/>
+          </>}
+          {view === "connections" && <>
+            <div className="page-heading"><div>
+              <div className="eyebrow">WHATSAPP CONNECTIONS</div>
+              <h1>Your WhatsApp numbers</h1>
+              <p className="muted">Use the shared W-Bot or link an account you own. Each connection is isolated.</p>
+            </div></div>
+            <ByonConnections/>
           </>}
           {view === "activity" && <>
             <div className="page-heading"><div><div className="eyebrow">ACTIVITY & LIMITS</div><h1>Activity & subscription</h1><p className="muted">Group activation history, security changes and shared bot connectivity.</p></div></div>

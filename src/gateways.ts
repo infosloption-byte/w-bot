@@ -1,5 +1,6 @@
 import type { Config } from "./config.js";
 import { sendGroupText } from "./whatsapp.js";
+import { byonRequest } from "./byon-shared.js";
 
 export type GatewayKind = "OFFICIAL" | "WEB";
 
@@ -25,7 +26,7 @@ export function validateGroupDestination(gateway: GatewayKind, id: string): void
   }
 }
 
-export async function sendGatewayText(config: Config, gateway: GatewayKind, groupId: string, text: string, quoted?: QuoteReference): Promise<string | null> {
+export async function sendGatewayText(config: Config, gateway: GatewayKind, groupId: string, text: string, quoted?: QuoteReference, connectionId?: string | null): Promise<string | null> {
   if (config.dryRun) return null;
   if (gateway === "OFFICIAL") {
     if (!config.WHATSAPP_ACCESS_TOKEN || !config.WHATSAPP_PHONE_NUMBER_ID) {
@@ -34,6 +35,19 @@ export async function sendGatewayText(config: Config, gateway: GatewayKind, grou
     return sendGroupText(config, groupId, text, quoted?.messageId);
   }
   validateGroupDestination(gateway, groupId);
+  if (connectionId) {
+    let response: Response;
+    try {
+      response = await byonRequest(config, "/connections/" + connectionId + "/send", "POST", {
+        groupId, text, quoted
+      });
+    } catch { throw new GatewayUnavailableError("WEB", "CUSTOMER_CONNECTION_UNAVAILABLE"); }
+    if (response.status === 503) throw new GatewayUnavailableError("WEB", "CUSTOMER_DISCONNECTED");
+    if (!response.ok) throw new Error("Customer gateway send HTTP " + response.status);
+    const body = await response.json() as { messageId?: string };
+    if (!body.messageId) throw new Error("Customer gateway did not acknowledge send");
+    return body.messageId;
+  }
   if (!config.webEnabled || !config.WEB_GATEWAY_TOKEN) {
     throw new GatewayUnavailableError(gateway, "DISABLED");
   }

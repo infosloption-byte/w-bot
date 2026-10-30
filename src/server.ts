@@ -9,6 +9,8 @@ import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
 import { isWebGroupId, type GatewayKind } from "./gateways.js";
 import { registerPortalRoutes } from "./portal.js";
+import { registerByonPortalRoutes } from "./byon-portal.js";
+import { byonAuthorized, connectionKey, connectionTypeAllowed } from "./byon-shared.js";
 import { registerPlatformRoutes } from "./platform.js";
 import { ingestTenantMessage } from "./quotas.js";
 import { runRetention } from "./retention.js";
@@ -18,6 +20,7 @@ const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
 const provider = createTranslationProvider(cfg);
 registerPortalRoutes(app, prisma, cfg);
+registerByonPortalRoutes(app, prisma, cfg);
 registerPlatformRoutes(app, prisma, cfg);
 
 function safeToken(given: string | undefined, expected: string): boolean {
@@ -90,12 +93,21 @@ app.get("/webhooks/whatsapp", async (request, reply) => {
   return reply.type("text/plain").send(q["hub.challenge"]);
 });
 
-async function enqueue(groupId: string, messageId: string, senderId: string, text: string, gateway: GatewayKind) {
+async function enqueue(groupId: string, messageId: string, senderId: string, text: string, gateway: GatewayKind, key = "shared") {
   // Ignore our own translated group replies (including group webhook echoes).
   if (text.startsWith("🌐 ")) return false;
   if (await prisma.message.findFirst({ where: { outboundMessageId: messageId }, select: { id: true } })) return false;
-  const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
+  const group = await prisma.group.findUnique({ where: { connectionKey_whatsappGroupId: { connectionKey: key, whatsappGroupId: groupId } } });
   if (!group || !group.enabled || group.gateway !== gateway) return false; // fail closed: channel-locked allowlist
+  if (key !== "shared") {
+    const c = await prisma.customerWhatsAppConnection.findUnique({
+      where: { id: key.slice(5) }
+    });
+    const rules = await prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } });
+    if (!c || !c.active || c.status !== "CONNECTED" || c.id !== group.connectionId ||
+        !group.tenantId || group.tenantId !== c.tenantId ||
+        !rules || !connectionTypeAllowed(rules, c.kind)) return false;
+  }
   if (group.tenantId) {
     if (!group.consentAt) return false;
     return ingestTenantMessage(prisma, cfg, {
@@ -140,6 +152,19 @@ app.post("/internal/web/message", async (request, reply) => {
   }
   const m = webIngress.parse(request.body);
   const accepted = await enqueue(m.groupId, m.messageId, m.senderId, m.text, "WEB");
+  return reply.code(202).send({ accepted });
+});
+
+const byonIngress = webIngress.extend({
+  connectionId: z.string().regex(/^c[a-z0-9]{18,35}$/)
+});
+app.post("/internal/byon/message", async (request, reply) => {
+  if (!byonAuthorized(request.headers.authorization, cfg))
+    return reply.code(401).send({ error: "Unauthorized" });
+  const m = byonIngress.parse(request.body);
+  const accepted = await enqueue(
+    m.groupId, m.messageId, m.senderId, m.text, "WEB", connectionKey(m.connectionId)
+  );
   return reply.code(202).send({ accepted });
 });
 
@@ -295,12 +320,12 @@ app.post("/api/groups", async (request, reply) => {
     return reply.code(400).send({ error: "Web group IDs must end in @g.us" });
   }
   const gateway: GatewayKind = data.gateway === "web" ? "WEB" : "OFFICIAL";
-  const existing = await prisma.group.findUnique({ where: { whatsappGroupId: data.groupId } });
+  const existing = await prisma.group.findUnique({ where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: data.groupId } } });
   if (existing && existing.gateway !== gateway) {
     return reply.code(409).send({ error: "Existing group is locked to a different gateway" });
   }
   const group = await prisma.group.upsert({
-    where: { whatsappGroupId: data.groupId },
+    where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: data.groupId } },
     create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages },
     update: { name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages }
   });
@@ -314,7 +339,7 @@ app.patch<{ Params: { groupId: string } }>("/api/groups/:groupId", async (reques
     return reply.code(400).send({ error: "Unsupported or disabled target languages" });
   }
   if (!Object.keys(data).length) return reply.code(400).send({ error: "No changes supplied" });
-  const group = await prisma.group.findUnique({ where: { whatsappGroupId: request.params.groupId } });
+  const group = await prisma.group.findUnique({ where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: request.params.groupId } } });
   if (!group) return reply.code(404).send({ error: "Group not found" });
   const updated = await prisma.group.update({ where: { id: group.id }, data });
   if (data.targetLanguages) await prisma.message.updateMany({

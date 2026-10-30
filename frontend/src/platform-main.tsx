@@ -4,6 +4,8 @@ import "./style.css";
 import "./platform.css";
 import "./responsive.css";
 import { useSidebar } from "./useSidebar.js";
+import { ByonAdmin } from "./ByonAdmin.js";
+import "./connections.css";
 
 type Admin = { id: string; name: string; email: string; role: "SUPER_ADMIN" | "VIEWER"; lastLoginAt: string | null };
 type Overview = { tenants: number; users: number; groups: number; enabledGroups: number;
@@ -19,7 +21,7 @@ type Group = { id: string; name: string; enabled: boolean; gateway: string;
 type Delivery = { id: string; status: string; attempts: number; createdAt: string;
   group: { name: string; tenant: { name: string } | null } };
 type Audit = { id: string; action: string; createdAt: string; tenant?: { name: string } };
-type View = "overview" | "tenants" | "users" | "groups" | "languages" | "deliveries" | "activity" | "security";
+type View = "overview" | "tenants" | "users" | "groups" | "numbers" | "languages" | "deliveries" | "activity" | "security";
 type CatalogLanguage = { code: string; name: string; enabled: boolean; createdAt: string; updatedAt: string };
 const suggestedLanguages = [
   ["fr","French"], ["es","Spanish"], ["de","German"], ["ar","Arabic"],
@@ -242,6 +244,7 @@ function Console() {
     { key: "tenants", label: "Customers", icon: "♧" },
     { key: "users", label: "Users", icon: "♙" },
     { key: "groups", label: "WhatsApp Groups", icon: "☷" },
+    { key: "numbers", label: "WhatsApp Numbers", icon: "♧" },
     { key: "languages", label: "Languages", icon: "文" },
     { key: "deliveries", label: "Delivery Issues", icon: "⚠" },
     { key: "activity", label: "Audit & Activity", icon: "◷" },
@@ -369,6 +372,7 @@ function Console() {
               {g.enabled ? "Pause" : "Enable"}</button>}</td>
           </tr>)}</tbody></table></div>
         </section>}
+        {view === "numbers" && <ByonAdmin isSuperAdmin={admin.role === "SUPER_ADMIN"}/>}
         {view === "languages" && <div className="language-admin-layout">
           <section className="panel platform-panel">
             <div className="platform-toolbar"><div>

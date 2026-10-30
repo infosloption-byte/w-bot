@@ -26,6 +26,9 @@ const schema = z.object({
   WEB_GATEWAY_ENABLED: z.enum(["true", "false"]).default("false"),
   WEB_GATEWAY_TOKEN: z.string().optional(),
   WEB_GATEWAY_URL: z.string().url().default("http://web-gateway:9029"),
+  BYON_GATEWAY_ENABLED: z.enum(["true", "false"]).default("false"),
+  BYON_GATEWAY_TOKEN: z.string().optional(),
+  BYON_GATEWAY_URL: z.string().url().default("http://byon-gateway:9039"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).default("gemini-3.5-flash-lite"),
@@ -56,7 +59,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (cfg.WEB_GATEWAY_ENABLED === "true" && (!cfg.WEB_GATEWAY_TOKEN || cfg.WEB_GATEWAY_TOKEN.length < 32)) {
     throw new Error("WEB_GATEWAY_TOKEN of at least 32 characters required when Web gateway enabled");
   }
+  if (cfg.BYON_GATEWAY_ENABLED === "true" &&
+      (!cfg.BYON_GATEWAY_TOKEN || cfg.BYON_GATEWAY_TOKEN.length < 32)) {
+    throw new Error("BYON_GATEWAY_TOKEN must be at least 32 characters when enabled");
+  }
   if (cfg.DRY_RUN === "false" && cfg.WEB_GATEWAY_ENABLED !== "true"
+      && cfg.BYON_GATEWAY_ENABLED !== "true"
       && (!cfg.WHATSAPP_APP_SECRET || !cfg.WHATSAPP_ACCESS_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
     throw new Error("Live mode requires an enabled Web gateway or authorized Meta credentials");
   }

@@ -1,0 +1,16 @@
+
+.connection-workspace .panel{min-width:0}
+.connection-workspace .panel .form{margin-top:22px;display:grid;gap:14px}
+.connection-workspace .panel input:not([type="checkbox"]){width:100%;min-width:0;background:#0b1826;color:#e9f3f6;padding:13px;border:1px solid #2f5362;border-radius:10px;font-size:16px}
+.connection-choice{display:flex;flex-direction:column;text-align:left;width:100%;gap:5px;background:#112333;border:1px solid #31505d;border-radius:12px;padding:14px;margin:10px 0;color:#c9e0e9}
+.connection-choice.active{background:#164039;border-color:#39dec0}
+.connection-choice span{font-size:12px;color:#9db5c5}
+.connection-workspace .consent-row{font-size:12px;line-height:1.45}
+.connection-qr{display:flex;justify-content:center;margin:18px 0;padding:10px;border-radius:12px;background:white;width:max-content;max-width:100%}
+.connection-qr img{max-width:100%;height:auto}
+.connection-pair-code{padding:14px;border:1px solid #307f70;background:#18332d;border-radius:12px;margin:12px 0;display:grid;gap:8px}
+.connection-pair-code span{font-size:12px}.connection-pair-code strong{font-size:22px;letter-spacing:.12em}
+.connection-activation{border:1px solid #3cc2ad;padding:14px;border-radius:12px;margin:12px 0;max-width:100%;overflow-wrap:anywhere}
+.connection-activation code{font-size:13px;overflow-wrap:anywhere}
+.connection-group-list{max-height:160px;overflow-y:auto;margin:12px 0}.connection-group-list>div{padding:8px;border-bottom:1px solid #254451}
+.connection-workspace .danger-action{margin-top:24px}
