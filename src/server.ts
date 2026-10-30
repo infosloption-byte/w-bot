@@ -3,7 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { loadConfig } from "./config.js";
-import { DEFAULT_TARGET_LANGUAGES, LANGUAGE_NAMES, isLanguage, normalizeLanguageCode } from "./languages.js";
+import { MAX_GROUP_LANGUAGES, normalizeLanguageCode, loadEnabledLanguages, defaultGroupLanguages, validateTargetLanguages } from "./languages.js";
 import { createTranslationProvider } from "./translation.js";
 import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
@@ -26,16 +26,15 @@ function safeToken(given: string | undefined, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const targets = z.array(
-  z.string().transform(normalizeLanguageCode).refine(isLanguage, "Unsupported language")
-).min(1).max(DEFAULT_TARGET_LANGUAGES.length)
+const targets = z.array(z.string().transform(normalizeLanguageCode))
+  .min(1).max(MAX_GROUP_LANGUAGES)
   .refine(v => new Set(v).size === v.length, "Duplicate language");
 const groupSchema = z.object({
   groupId: z.string().min(1).max(191),
   name: z.string().trim().min(1).max(191),
   enabled: z.boolean().default(true),
   gateway: z.enum(["official", "web"]).default("official"),
-  targetLanguages: targets.default([...DEFAULT_TARGET_LANGUAGES])
+  targetLanguages: targets.optional()
 }).strict();
 const editGroupSchema = z.object({
   name: z.string().trim().min(1).max(191).optional(),
@@ -271,10 +270,14 @@ app.get("/api/ops/health", async () => ({
   retentionDays: cfg.MESSAGE_RETENTION_DAYS
 }));
 
-app.get("/api/languages", async () => ({
-  languages: DEFAULT_TARGET_LANGUAGES.map(code => ({ code, name: LANGUAGE_NAMES[code] })),
-  defaultTargetLanguages: [...DEFAULT_TARGET_LANGUAGES]
-}));
+app.get("/api/languages", async () => {
+  const languages = await loadEnabledLanguages(prisma);
+  return {
+    languages,
+    defaultTargetLanguages: defaultGroupLanguages(languages),
+    maxPerGroup: MAX_GROUP_LANGUAGES
+  };
+});
 
 app.get("/api/groups", async () => {
   const groups = await prisma.group.findMany({ orderBy: { createdAt: "desc" } });
@@ -283,6 +286,11 @@ app.get("/api/groups", async () => {
 
 app.post("/api/groups", async (request, reply) => {
   const data = groupSchema.parse(request.body);
+  const enabledLanguages = await loadEnabledLanguages(prisma);
+  const selectedLanguages = data.targetLanguages ?? defaultGroupLanguages(enabledLanguages);
+  if (!validateTargetLanguages(selectedLanguages, enabledLanguages)) {
+    return reply.code(400).send({ error: "Select languages enabled by the platform (maximum 10)" });
+  }
   if (data.gateway === "web" && !isWebGroupId(data.groupId)) {
     return reply.code(400).send({ error: "Web group IDs must end in @g.us" });
   }
@@ -293,18 +301,29 @@ app.post("/api/groups", async (request, reply) => {
   }
   const group = await prisma.group.upsert({
     where: { whatsappGroupId: data.groupId },
-    create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages },
-    update: { name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages }
+    create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages },
+    update: { name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages }
   });
   return reply.code(201).send({ group });
 });
 
 app.patch<{ Params: { groupId: string } }>("/api/groups/:groupId", async (request, reply) => {
   const data = editGroupSchema.parse(request.body);
+  if (data.targetLanguages &&
+      !validateTargetLanguages(data.targetLanguages, await loadEnabledLanguages(prisma))) {
+    return reply.code(400).send({ error: "Unsupported or disabled target languages" });
+  }
   if (!Object.keys(data).length) return reply.code(400).send({ error: "No changes supplied" });
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: request.params.groupId } });
   if (!group) return reply.code(404).send({ error: "Group not found" });
   const updated = await prisma.group.update({ where: { id: group.id }, data });
+  if (data.targetLanguages) await prisma.message.updateMany({
+    where: {
+      groupId: group.id, status: "PENDING", sendStartedAt: null,
+      outputText: { not: null }
+    },
+    data: { outputText: null, sourceLanguage: null }
+  });
   return { group: updated };
 });
 

@@ -1,7 +1,7 @@
 import { MessageStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
-import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
+import { configuredLanguages, loadEnabledLanguages, normalizeLanguageCode, translationTargets } from "./languages.js";
 import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
 import { GeminiApiError } from "./gemini.js";
 import { sendGatewayText, GatewayUnavailableError } from "./gateways.js";
@@ -58,6 +58,11 @@ export async function processPending(prisma: PrismaClient, provider: Translation
     where: { status: MessageStatus.PENDING, nextAttemptAt: { lte: now } },
     orderBy: { createdAt: "asc" }, take: 100, include: { group: true }
   });
+  // Read the global catalog for each worker pass so an operator's language
+  // enable/disable change takes effect on the next newly processed message.
+  const catalog = pending.length ? await loadEnabledLanguages(prisma) : [];
+  const allowed = new Set(catalog.map(x => x.code));
+  const names = Object.fromEntries(catalog.map(x => [x.code, x.name]));
   // Prevent one busy tenant from monopolizing all 10 jobs per tick.
   const fairOrder = pickFairMessages(pending, 10);
   let processed = 0;
@@ -81,8 +86,17 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         processed++;
         continue;
       }
-      const langs = configuredLanguages(msg.group.targetLanguages);
-      if (!langs.length) throw new Error("Group has no valid target languages");
+      const langs = configuredLanguages(msg.group.targetLanguages, allowed);
+      if (!langs.length) {
+        await prisma.message.update({
+          where: { id: msg.id }, data: {
+            status: MessageStatus.COMPLETED, processedAt: new Date(),
+            lastError: "No enabled target languages for this group"
+          }
+        });
+        processed++;
+        continue;
+      }
       let source = msg.sourceLanguage ? normalizeLanguageCode(msg.sourceLanguage) : "";
       let output = msg.outputText;
 
@@ -91,12 +105,12 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         const results: Record<string, string> = {};
         if (provider.translateBatch) {
           // Gemini does language detection and all translations in ONE request.
-          const batch = await provider.translateBatch(msg.originalText, langs);
+          const batch = await provider.translateBatch(msg.originalText, langs, names);
           source = normalizeLanguageCode(batch.sourceLanguage);
           Object.assign(results, batch.translations);
         } else {
           source = source || normalizeLanguageCode(await provider.detect(msg.originalText));
-          for (const target of translationTargets(langs, source)) {
+          for (const target of translationTargets(langs, source, allowed)) {
             results[target] = await provider.translate(msg.originalText, source, target);
           }
         }
@@ -109,7 +123,7 @@ export async function processPending(prisma: PrismaClient, provider: Translation
           if (typeof translated !== "string" || !translated.trim()) {
             throw new Error("Translation missing for " + target);
           }
-          parts.push("🌐 " + LANGUAGE_NAMES[target] + "\n" + translated);
+          parts.push("🌐 " + names[target] + "\n" + translated);
         }
         output = parts.join("\n\n");
         if (output.length > 3900) throw new Error("Translation exceeds WhatsApp text limit");

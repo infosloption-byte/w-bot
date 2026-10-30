@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
-import { DEFAULT_TARGET_LANGUAGES, isLanguage, normalizeLanguageCode } from "./languages.js";
+import { MAX_GROUP_LANGUAGES, normalizeLanguageCode, loadEnabledLanguages, defaultGroupLanguages, validateTargetLanguages } from "./languages.js";
 import {
   allowAttempt, createSession, digest, hashPassword, verifyPassword,
   requirePortalAuth, requireMutationHeader, sessionCookie,
@@ -28,8 +28,8 @@ const login = z.object({
 const groupEdit = z.object({
   enabled: z.boolean().optional(),
   targetLanguages: z.array(
-    z.string().transform(normalizeLanguageCode).refine(isLanguage)
-  ).min(1).max(5).refine(arr => new Set(arr).size === arr.length).optional()
+    z.string().transform(normalizeLanguageCode)
+  ).min(1).max(MAX_GROUP_LANGUAGES).refine(arr => new Set(arr).size === arr.length).optional()
 }).strict().refine(x => Object.keys(x).length > 0);
 const activationInput = z.object({
   groupId: z.string().refine(isWebGroupId),
@@ -171,6 +171,15 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     };
   });
 
+  app.get("/portal/api/languages", async (request, reply) => {
+    const user = await requirePortalAuth(prisma, request, reply);
+    if (!user) return;
+    return {
+      languages: await loadEnabledLanguages(prisma),
+      maxPerGroup: MAX_GROUP_LANGUAGES
+    };
+  });
+
   app.get("/portal/api/groups", async (request, reply) => {
     const user = await requirePortalAuth(prisma, request, reply);
     if (!user) return;
@@ -191,11 +200,21 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     if (!user) return;
     if (user.role === "VIEWER") return reply.code(403).send({ error: "Read-only membership" });
     const changes = groupEdit.parse(request.body);
+    if (changes.targetLanguages && !validateTargetLanguages(
+      changes.targetLanguages, await loadEnabledLanguages(prisma)
+    )) return reply.code(400).send({ error: "Select only languages enabled by the platform (maximum 10)" });
     const result = await prisma.group.updateMany({
       where: { id: request.params.id, tenantId: user.tenantId, gateway: "WEB" },
       data: changes
     });
     if (!result.count) return reply.code(404).send({ error: "Group not found" });
+    if (changes.targetLanguages) await prisma.message.updateMany({
+      where: {
+        groupId: request.params.id, status: "PENDING", sendStartedAt: null,
+        outputText: { not: null }
+      },
+      data: { outputText: null, sourceLanguage: null }
+    });
     await prisma.tenantAudit.create({
       data: { tenantId: user.tenantId, actorId: user.userId, groupId: request.params.id, action: "GROUP_UPDATED" }
     });
@@ -362,6 +381,11 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
       return reply.code(401).send({ error: "Unauthorized" });
     }
     const command = activationInput.parse(request.body);
+    const enabledLanguages = await loadEnabledLanguages(prisma);
+    const initialLanguages = defaultGroupLanguages(enabledLanguages);
+    if (!initialLanguages.length) {
+      return reply.code(503).send({ error: "No translation languages are enabled" });
+    }
     const now = new Date();
     try {
       const result = await prisma.$transaction(async tx => {
@@ -396,7 +420,7 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
               data: {
                 tenantId: claim.tenantId, claimedAt: now, consentAt: now,
                 name: command.groupName, enabled: true,
-                targetLanguages: [...DEFAULT_TARGET_LANGUAGES]
+                targetLanguages: initialLanguages
               }
             })
           : await tx.group.create({
@@ -404,7 +428,7 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
                 tenantId: claim.tenantId, claimedAt: now, consentAt: now,
                 whatsappGroupId: command.groupId,
                 gateway: "WEB", name: command.groupName, enabled: true,
-                targetLanguages: [...DEFAULT_TARGET_LANGUAGES]
+                targetLanguages: initialLanguages
               }
             });
         await tx.groupActivation.update({

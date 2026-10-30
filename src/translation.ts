@@ -25,7 +25,7 @@ export interface TranslationBatch {
 }
 
 export interface TranslationProvider {
-  translateBatch?(text: string, targets: string[]): Promise<TranslationBatch>;
+  translateBatch?(text: string, targets: string[], names?: Record<string, string>): Promise<TranslationBatch>;
   detect(text: string): Promise<string>;
   translate(text: string, source: string, target: string): Promise<string>;
 }

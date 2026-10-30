@@ -85,3 +85,7 @@ The Model B hardening build adds email/password recovery, tenant-scoped audit hi
 ## Dedicated Platform Admin Console
 
 A separate platform administrator account and operations console monitor multi-customer tenant workspaces, registered users, WhatsApp groups, delivery failures, usage, subscriptions, gateway health and audits. Administrators are created by a one-time trusted CLI bootstrap; customer registrations never become platform administrators. Build fix: missing Prisma Message.sendStartedAt field restored. See [Platform Admin deployment instructions](docs/PLATFORM_ADMIN.md). The feature remains in draft and must pass builds and migration checks before live deployment.
+
+## Platform-managed translation languages
+
+The Platform Admin **Languages** module manages which translation targets customers may use. The original five remain enabled, with more language presets available to enable or custom language codes to add. Customers may select up to ten enabled languages per group. See [language catalogue and rollout](docs/LANGUAGE_CATALOG.md).

@@ -25,3 +25,16 @@
 @media(max-width:1100px){.platform-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.platform-login{grid-template-columns:1fr}.platform-login-intro{padding:30px;min-height:300px}.platform-login-intro .brand{margin-bottom:24px}.platform-login-intro h1{font-size:34px}.platform-login-note{display:none}
 .platform-dashboard .sidebar{width:100%}.platform-metrics{grid-template-columns:1fr}.platform-login-form{padding:22px}.platform-table{min-width:650px}}
+
+/* Platform language catalog: theme-aligned, responsive controls */
+.language-admin-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(290px,1fr);align-items:start;gap:20px}
+.platform-language-create h3{margin:8px 0 12px}
+.platform-language-create .form{display:grid;gap:16px;margin-top:20px}
+.platform-language-create .form input:not([type=checkbox]){width:100%;background:#101e2b;color:#e7f1f7;border:1px solid #315064;border-radius:10px;padding:12px}
+.platform-language-create .form .consent-row{display:flex;align-items:start;gap:10px;font-size:12px;font-weight:400;line-height:1.5;color:#b5cbd7}
+.platform-language-create .form .consent-row input{width:18px;height:18px;flex:none;accent-color:#36d8bb}
+.platform-language-suggestions{margin-top:25px;border-top:1px solid #274152;padding-top:23px}
+.platform-language-suggestions .section-label{margin-bottom:12px}
+.platform-language-suggestions .language-chips{display:flex;flex-wrap:wrap;gap:8px}
+.platform-language-suggestions .chip{font-size:12px}
+@media(max-width:1000px){.language-admin-layout{grid-template-columns:1fr}}

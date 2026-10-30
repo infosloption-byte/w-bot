@@ -230,3 +230,13 @@ model PlatformAudit {
 
   @@index([createdAt])
 }
+
+model LanguageCatalog {
+  code      String   @id @db.VarChar(8)
+  name      String   @db.VarChar(80)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, name])
+}

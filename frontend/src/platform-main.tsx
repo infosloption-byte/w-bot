@@ -17,7 +17,16 @@ type Group = { id: string; name: string; enabled: boolean; gateway: string;
 type Delivery = { id: string; status: string; attempts: number; createdAt: string;
   group: { name: string; tenant: { name: string } | null } };
 type Audit = { id: string; action: string; createdAt: string; tenant?: { name: string } };
-type View = "overview" | "tenants" | "users" | "groups" | "deliveries" | "activity" | "security";
+type View = "overview" | "tenants" | "users" | "groups" | "languages" | "deliveries" | "activity" | "security";
+type CatalogLanguage = { code: string; name: string; enabled: boolean; createdAt: string; updatedAt: string };
+const suggestedLanguages = [
+  ["fr","French"], ["es","Spanish"], ["de","German"], ["ar","Arabic"],
+  ["hi","Hindi"], ["ta","Tamil"], ["ja","Japanese"], ["zh","Chinese"],
+  ["pt","Portuguese"], ["ko","Korean"], ["it","Italian"], ["tr","Turkish"],
+  ["nl","Dutch"], ["uk","Ukrainian"], ["pl","Polish"], ["bn","Bengali"],
+  ["ml","Malayalam"], ["te","Telugu"], ["id","Indonesian"], ["th","Thai"],
+  ["vi","Vietnamese"], ["fil","Filipino"], ["ne","Nepali"]
+] as const;
 type CustomerUser = { id: string; displayName: string; email: string; emailVerifiedAt: string | null; createdAt: string;
   memberships: Array<{ role: string; tenant: { id: string; name: string } }> };
 
@@ -51,6 +60,11 @@ function Console() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [users, setUsers] = useState<CustomerUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [catalog, setCatalog] = useState<CatalogLanguage[]>([]);
+  const [newLanguageCode, setNewLanguageCode] = useState("");
+  const [newLanguageName, setNewLanguageName] = useState("");
+  const [newLanguageEnabled, setNewLanguageEnabled] = useState(true);
+  const [languageSearch, setLanguageSearch] = useState("");
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [activity, setActivity] = useState<Audit[]>([]);
   const [platformActivity, setPlatformActivity] = useState<Audit[]>([]);
@@ -65,15 +79,17 @@ function Console() {
   const [newPassword, setNewPassword] = useState("");
 
   const refresh = useCallback(async () => {
-    const [summary, tenantData, userData, groupData, failures, actions] = await Promise.all([
+    const [summary, tenantData, userData, groupData, languageData, failures, actions] = await Promise.all([
       platformApi<Overview>("/overview"),
       platformApi<{ tenants: Tenant[] }>("/tenants"),
       platformApi<{ users: CustomerUser[] }>("/users"),
       platformApi<{ groups: Group[] }>("/groups"),
+      platformApi<{ languages: CatalogLanguage[] }>("/languages"),
       platformApi<{ messages: Delivery[] }>("/deliveries"),
       platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity")
     ]);
     setOverview(summary); setTenants(tenantData.tenants); setUsers(userData.users); setGroups(groupData.groups);
+    setCatalog(languageData.languages);
     setDeliveries(failures.messages);
     setActivity(actions.events); setPlatformActivity(actions.platformEvents);
   }, []);
@@ -105,7 +121,7 @@ function Console() {
     try { await platformApi("/auth/logout", { method: "POST", body: "{}" }); }
     catch { /* Clear local state regardless of a network error. */ }
     setAdmin(null); setOverview(null); setTenants([]);
-    setGroups([]); setDeliveries([]); setActivity([]);
+    setGroups([]); setCatalog([]); setDeliveries([]); setActivity([]);
   }
 
   function editPlan(t: Tenant) {
@@ -132,6 +148,36 @@ function Console() {
       setEditing(null); await refresh();
       setNotice("Workspace subscription updated. Change recorded in platform audit.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save plan"); }
+    finally { setBusy(false); }
+  }
+
+  async function addLanguage(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    try {
+      await platformApi("/languages", {
+        method: "POST",
+        body: JSON.stringify({
+          code: newLanguageCode.trim().toLowerCase(),
+          name: newLanguageName.trim(), enabled: newLanguageEnabled
+        })
+      });
+      setNewLanguageCode(""); setNewLanguageName("");
+      await refresh();
+      setNotice("Language added to the global catalog. Enabled languages are now available to customer groups.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not add language"); }
+    finally { setBusy(false); }
+  }
+
+  async function changeLanguage(language: CatalogLanguage, enabled: boolean) {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await platformApi("/languages/" + encodeURIComponent(language.code), {
+        method: "PATCH", body: JSON.stringify({ enabled })
+      });
+      await refresh();
+      setNotice(enabled ? language.name + " is available to customers." :
+        language.name + " disabled. Existing group choices are preserved but translation into it stops.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Unable to change language"); }
     finally { setBusy(false); }
   }
 
@@ -193,6 +239,7 @@ function Console() {
     { key: "tenants", label: "Customers", icon: "♧" },
     { key: "users", label: "Users", icon: "♙" },
     { key: "groups", label: "WhatsApp Groups", icon: "☷" },
+    { key: "languages", label: "Languages", icon: "文" },
     { key: "deliveries", label: "Delivery Issues", icon: "⚠" },
     { key: "activity", label: "Audit & Activity", icon: "◷" },
     { key: "security", label: "Admin Security", icon: "⚙" }
@@ -293,6 +340,63 @@ function Console() {
               {g.enabled ? "Pause" : "Enable"}</button>}</td>
           </tr>)}</tbody></table></div>
         </section>}
+        {view === "languages" && <div className="language-admin-layout">
+          <section className="panel platform-panel">
+            <div className="platform-toolbar"><div>
+              <h3>Translation language catalog</h3>
+              <p className="muted text-small">{catalog.filter(lang => lang.enabled).length} enabled · {catalog.length} registered. Customers select from enabled languages in My Groups (up to 10 per group).</p>
+            </div>
+              <input className="platform-search" aria-label="Search languages"
+                placeholder="Search by name or code…" value={languageSearch}
+                onChange={e => setLanguageSearch(e.target.value)} />
+            </div>
+            <div className="platform-table-scroll"><table className="platform-table">
+              <thead><tr><th>Language</th><th>ISO code</th><th>Availability</th><th>Action</th></tr></thead>
+              <tbody>{catalog.filter(lang =>
+                (lang.name + " " + lang.code).toLowerCase().includes(languageSearch.toLowerCase())
+              ).map(lang => <tr key={lang.code}>
+                <td><strong>{lang.name}</strong></td>
+                <td><code>{lang.code}</code></td>
+                <td><span className={"status " + (lang.enabled ? "on" : "")}>
+                  {lang.enabled ? "Enabled" : "Disabled"}</span></td>
+                <td>{admin.role === "SUPER_ADMIN" && <>
+                  <button type="button" className="text-button" disabled={busy}
+                    onClick={() => void changeLanguage(lang, !lang.enabled)}>
+                    {lang.enabled ? "Disable" : "Enable"}</button>
+                </>}</td>
+              </tr>)}</tbody>
+            </table></div>
+            <p className="muted text-small">Disabling a language stops it from being translated for newly processed messages, including groups that selected it earlier. It does not erase saved group preferences.</p>
+          </section>
+          {admin.role === "SUPER_ADMIN" && <section className="panel platform-language-create">
+            <div className="eyebrow">CATALOG MANAGEMENT</div>
+            <h3>Add a language</h3>
+            <p className="muted text-small">Add a supported translation target using its ISO 639 two- or three-letter code.</p>
+            <form className="form" onSubmit={e => void addLanguage(e)}>
+              <label>Language name<input type="text" required minLength={2} maxLength={80}
+                placeholder="e.g. French" value={newLanguageName}
+                onChange={e => setNewLanguageName(e.target.value)}/></label>
+              <label>Language code<input type="text" required minLength={2} maxLength={3}
+                pattern="[A-Za-z]{2,3}" placeholder="e.g. fr" value={newLanguageCode}
+                onChange={e => setNewLanguageCode(e.target.value.toLowerCase())}/></label>
+              <label className="consent-row"><input type="checkbox" checked={newLanguageEnabled}
+                onChange={e => setNewLanguageEnabled(e.target.checked)}/>
+                Enable this language for customer groups immediately</label>
+              <button type="submit" className="button primary" disabled={busy}>
+                {busy ? "Saving…" : "Add language"}</button>
+            </form>
+            <div className="platform-language-suggestions">
+              <div className="section-label">QUICK ADD</div>
+              {suggestedLanguages.some(([code]) => !catalog.some(lang => lang.code === code))
+                ? <div className="language-chips">{suggestedLanguages.filter(([code]) =>
+                    !catalog.some(lang => lang.code === code)
+                  ).map(([code,name]) => <button key={code} type="button" className="chip"
+                    onClick={() => { setNewLanguageCode(code); setNewLanguageName(name); }}>
+                    + {name}</button>)}</div>
+                : <p className="muted text-small">All suggested languages are already in the catalog. Enable them in the list, or register another code above.</p>}
+            </div>
+          </section>}
+        </div>}
         {view === "deliveries" && <section className="panel platform-panel">
           <div className="panel-heading"><h3>Failed and uncertain deliveries ({deliveries.length})</h3></div>
           <p className="muted text-small">Message text, sender identities and private WhatsApp IDs are deliberately hidden.</p>

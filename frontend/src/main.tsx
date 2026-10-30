@@ -21,11 +21,7 @@ type Usage = {
   limits: { groups: number; messagesPerMonth: number };
   recent: Array<{ id: string; status: string; sourceLanguage: string | null; createdAt: string; group: { name: string } }>;
 };
-const languages = [
-  { code: "he", name: "Hebrew" }, { code: "en", name: "English" },
-  { code: "si", name: "Sinhala" }, { code: "uz", name: "Uzbek" },
-  { code: "ru", name: "Russian" }
-];
+type Language = { code: string; name: string };
 
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch("/portal/api" + url, {
@@ -48,6 +44,8 @@ function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [maxLanguages, setMaxLanguages] = useState(10);
   const [view, setView] = useState<View>("overview");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
@@ -63,12 +61,15 @@ function App() {
   const refresh = useCallback(async () => {
     const account = await api<Me>("/me");
     setMe(account);
-    const [activity, managed] = await Promise.all([
+    const [activity, managed, catalog] = await Promise.all([
       api<Usage>("/usage"),
-      api<{ groups: Group[] }>("/groups")
+      api<{ groups: Group[] }>("/groups"),
+      api<{ languages: Language[]; maxPerGroup: number }>("/languages")
     ]);
     setUsage(activity);
     setGroups(managed.groups);
+    setLanguages(catalog.languages);
+    setMaxLanguages(catalog.maxPerGroup);
   }, []);
 
   useEffect(() => {
@@ -108,7 +109,7 @@ function App() {
   async function logout() {
     try { await api("/auth/logout", { method: "POST", body: "{}" }); }
     catch { /* clear local app state regardless */ }
-    setMe(null); setGroups([]); setUsage(null); setActivation(null);
+    setMe(null); setGroups([]); setUsage(null); setActivation(null); setLanguages([]);
   }
 
   async function createActivation() {
@@ -182,7 +183,7 @@ function App() {
           <div className="eyebrow"><span className="live-dot" /> PRIVATE TECHNICAL PILOT</div>
           <h1>One bot.<br/><em>Every language.</em><br/>Your groups.</h1>
           <p>Bring multilingual WhatsApp group conversations together with intelligent translation. One shared W-Bot number. Your own private workspace.</p>
-          <div className="hero-features"><span>◉ Five languages</span><span>◉ Replies in context</span><span>◉ Group controls</span></div>
+          <div className="hero-features"><span>◉ Languages managed by platform</span><span>◉ Replies in context</span><span>◉ Group controls</span></div>
         </div>
         <div className="auth-disclaimer">Invitation-only pilot · Unofficial WhatsApp Web connector · Group administrator consent required</div>
       </section>
@@ -248,12 +249,12 @@ function App() {
             <div className="metrics">
               <div className="metric"><div className="metric-label">ACTIVE GROUPS <span>▦</span></div><div className="metric-value">{groups.filter(g => g.enabled).length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
               <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}<small> / {me.limits.messagesPerMonth}</small></div><div className="meter"><span style={{ width: Math.min(100, (usage?.messages ?? 0) / me.limits.messagesPerMonth * 100) + "%" }}/></div></div>
-              <div className="metric"><div className="metric-label">SUPPORTED LANGUAGES <span>文</span></div><div className="metric-value">05</div><div className="metric-foot">Hebrew · English · Sinhala · Uzbek · Russian</div></div>
+              <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span>文</span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
             </div>
             <div className="two-column">
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => setView("groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
-                  <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.length} languages · Web gateway</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
+                  <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · Web gateway</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
                 ) : <div className="empty">No groups yet. Use <button className="text-button" onClick={() => setView("activate")}>Add Group</button> to start.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
@@ -270,17 +271,27 @@ function App() {
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
                 <div className="group-title"><div className="group-icon">♧</div><div className="grow"><h3>{group.name}</h3><small>WhatsApp Web · {group.whatsappGroupId}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
-                <div className="section-label">TRANSLATION LANGUAGES</div>
+                <div className="section-label">TRANSLATION LANGUAGES · UP TO {maxLanguages}</div>
+                <p className="muted text-small">Select which platform-enabled languages this group should receive. More languages create longer WhatsApp replies.</p>
                 <div className="language-chips">{languages.map(lang => {
-                  const selected = group.targetLanguages.includes(lang.code);
-                  return <button key={lang.code} type="button" disabled={busy} aria-pressed={selected}
-                    className={"chip " + (selected ? "selected" : "")}
-                    onClick={() => void updateGroup(group, {
-                      targetLanguages: selected
-                        ? group.targetLanguages.length > 1 ? group.targetLanguages.filter(code => code !== lang.code) : group.targetLanguages
-                        : [...group.targetLanguages, lang.code]
-                    })}>{selected ? "✓ " : "+ "}{lang.name}</button>;
+                  const activeCodes = new Set(languages.map(item => item.code));
+                  const enabledSelection = group.targetLanguages.filter(code => activeCodes.has(code));
+                  const selected = enabledSelection.includes(lang.code);
+                  return <button key={lang.code} type="button"
+                    disabled={busy || (!selected && enabledSelection.length >= maxLanguages)}
+                    aria-pressed={selected} className={"chip " + (selected ? "selected" : "")}
+                    onClick={() => {
+                      const updated = selected
+                        ? enabledSelection.filter(code => code !== lang.code)
+                        : [...enabledSelection, lang.code];
+                      if (!updated.length) { reportError(new Error("Choose at least one enabled language")); return; }
+                      void updateGroup(group, { targetLanguages: updated });
+                    }}>{selected ? "✓ " : "+ "}{lang.name}</button>;
                 })}</div>
+                {group.targetLanguages.some(code => !languages.some(item => item.code === code)) &&
+                  <p className="muted text-small" role="status">Some previously selected languages are disabled by Platform Admin and will not be translated. Saving a new selection removes them.</p>}
+                {!group.targetLanguages.some(code => languages.some(item => item.code === code)) &&
+                  <p className="alert error" role="alert">No enabled languages selected. Choose at least one language to resume translation.</p>}
                 <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => setPendingDisconnect(group)}>Disconnect group</button>
                     <button className="text-button danger-action" type="button" disabled={busy}
                       style={{ marginLeft: 18 }} onClick={() => setPendingHistoryDelete(group)}>Delete message history</button></div>

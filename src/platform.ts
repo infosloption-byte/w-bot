@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
+import { isValidLanguageCode } from "./languages.js";
 import {
   allowAttempt, digest, hashPassword, verifyPassword, requireMutationHeader
 } from "./portal-auth.js";
@@ -24,6 +25,18 @@ const changePlan = z.object({
   monthlyMessages: z.number().int().min(0).max(1_000_000),
   periodEnd: z.string().datetime().nullable().optional()
 }).strict();
+const languageName = z.string().trim().min(2).max(80)
+  .regex(/^[\p{L}\p{M} .()'-]+$/u, "Use a language name without markup");
+const addLanguage = z.object({
+  code: z.string().trim().toLowerCase().refine(isValidLanguageCode, "Use a 2- or 3-letter ISO code"),
+  name: languageName,
+  enabled: z.boolean().default(true)
+}).strict();
+const editLanguage = z.object({
+  name: languageName.optional(),
+  enabled: z.boolean().optional()
+}).strict().refine(value => Object.keys(value).length > 0);
+
 const changeGroup = z.object({ enabled: z.boolean() }).strict();
 
 function cookie(value: string, secure: boolean, maxAge = SESSION_SECONDS): string {
@@ -187,6 +200,83 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
       monthUsage: tenant.usageBuckets[0]?.messages ?? 0,
       owner: tenant.members[0]?.user ?? null, subscription: tenant.subscription
     })) };
+  });
+
+  app.get("/portal/api/platform/languages", async (req, reply) => {
+    const admin = await adminIdentity(prisma, req, reply);
+    if (!admin) return;
+    const languages = await prisma.languageCatalog.findMany({
+      orderBy: [{ name: "asc" }, { code: "asc" }],
+      select: { code: true, name: true, enabled: true, createdAt: true, updatedAt: true }
+    });
+    return { languages };
+  });
+
+  app.post("/portal/api/platform/languages", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const admin = await adminIdentity(prisma, req, reply);
+    if (!admin || !requiredSuperAdmin(admin, reply)) return;
+    const input = addLanguage.parse(req.body);
+    const exists = await prisma.languageCatalog.findUnique({ where: { code: input.code } });
+    if (exists) return reply.code(409).send({ error: "Language code already exists" });
+    try {
+      const language = await prisma.$transaction(async tx => {
+        const created = await tx.languageCatalog.create({ data: input });
+        await tx.platformAudit.create({
+          data: { adminId: admin.id, action: "LANGUAGE_ADDED", targetId: input.code }
+        });
+        return created;
+      });
+      return reply.code(201).send({ language });
+    } catch (error) {
+      if (typeof error === "object" && error !== null &&
+          "code" in error && error.code === "P2002")
+        return reply.code(409).send({ error: "Language code already exists" });
+      throw error;
+    }
+  });
+
+  app.patch<{ Params: { code: string } }>("/portal/api/platform/languages/:code", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const admin = await adminIdentity(prisma, req, reply);
+    if (!admin || !requiredSuperAdmin(admin, reply)) return;
+    const code = req.params.code.trim().toLowerCase();
+    if (!isValidLanguageCode(code)) return reply.code(400).send({ error: "Invalid language code" });
+    const input = editLanguage.parse(req.body);
+    const result = await prisma.$transaction(async tx => {
+      // Serialize catalog toggles so two administrators cannot both disable
+      // the last enabled language during concurrent requests.
+      await tx.$queryRaw`SELECT code FROM LanguageCatalog FOR UPDATE`;
+      const existing = await tx.languageCatalog.findUnique({ where: { code } });
+      if (!existing) return "NOT_FOUND" as const;
+      if (input.enabled === false && existing.enabled) {
+        const enabledCount = await tx.languageCatalog.count({ where: { enabled: true } });
+        if (enabledCount <= 1) return "LAST_ENABLED" as const;
+      }
+      const language = await tx.languageCatalog.update({
+        where: { code }, data: input
+      });
+      if (input.enabled !== undefined && input.enabled !== existing.enabled) {
+        // Cached replies can contain a recently disabled language. Invalidate
+        // only unsent pending translations; in-flight sends remain unchanged.
+        await tx.message.updateMany({
+          where: { status: "PENDING", sendStartedAt: null, outputText: { not: null } },
+          data: { outputText: null, sourceLanguage: null }
+        });
+      }
+      await tx.platformAudit.create({
+        data: {
+          adminId: admin.id, action:
+            input.enabled === false ? "LANGUAGE_DISABLED" :
+            input.enabled === true ? "LANGUAGE_ENABLED" : "LANGUAGE_RENAMED",
+          targetId: code
+        }
+      });
+      return language;
+    });
+    if (result === "NOT_FOUND") return reply.code(404).send({ error: "Language not found" });
+    if (result === "LAST_ENABLED") return reply.code(409).send({ error: "Keep at least one language enabled" });
+    return { language: result };
   });
 
   app.get("/portal/api/platform/users", async (req, reply) => {
