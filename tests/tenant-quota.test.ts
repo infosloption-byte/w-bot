@@ -9,7 +9,9 @@ function cfg() {
     DATABASE_URL: "mysql://u:p@localhost:3306/wbot",
     ADMIN_API_KEY: "a".repeat(64),
     WHATSAPP_VERIFY_TOKEN: "b".repeat(32),
-    DRY_RUN: "true", SAAS_MONTHLY_MESSAGES: "2"
+    // The global configuration requires >= 10; the tenant fixture below
+    // deliberately overrides the subscription allowance to 2.
+    DRY_RUN: "true", SAAS_MONTHLY_MESSAGES: "10"
   });
 }
 test("UTC month keys roll over and inactive subscriptions are blocked", () => {
@@ -43,7 +45,9 @@ test("reservations reject repeated messages and enforce a tenant allowance", asy
       },
       $executeRaw: async () => 1,
       tenantUsage: {
-        updateMany: async () => {
+        updateMany: async (args: { where: { messages: { lt: number } } }) => {
+          // Enforce the customer-specific allowance of 2, not the global 10.
+          assert.equal(args.where.messages.lt, 2);
           if (used >= 2) return { count: 0 };
           used++; return { count: 1 };
         }
