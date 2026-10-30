@@ -9,6 +9,7 @@ import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
 import { isWebGroupId, type GatewayKind } from "./gateways.js";
 import { registerPortalRoutes } from "./portal.js";
+import { registerPlatformRoutes } from "./platform.js";
 import { ingestTenantMessage } from "./quotas.js";
 import { runRetention } from "./retention.js";
 import { checkGatewayHealth } from "./gateway-health.js";
@@ -17,6 +18,7 @@ const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
 const provider = createTranslationProvider(cfg);
 registerPortalRoutes(app, prisma, cfg);
+registerPlatformRoutes(app, prisma, cfg);
 
 function safeToken(given: string | undefined, expected: string): boolean {
   if (!given) return false;

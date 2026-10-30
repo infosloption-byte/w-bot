@@ -81,3 +81,7 @@ Model B is being developed on the feature/model-b-shared-number-saas branch. Cus
 ## Model B SaaS — account security, isolation, quotas and reliability
 
 The Model B hardening build adds email/password recovery, tenant-scoped audit history, group lifecycle and privacy controls, atomic message allowance enforcement, operator-managed subscription status, gateway health checks, and safer queue recovery. The implementation remains an **invite-only pilot**, not an authorized WhatsApp commercial integration. See [Model B hardening and deployment](docs/MODEL_B_HARDENING.md) for the backup/migration sequence, SMTP requirements and acceptance tests.
+
+## Dedicated Platform Admin Console
+
+A separate platform administrator account and operations console monitor multi-customer tenant workspaces, registered users, WhatsApp groups, delivery failures, usage, subscriptions, gateway health and audits. Administrators are created by a one-time trusted CLI bootstrap; customer registrations never become platform administrators. Build fix: missing Prisma Message.sendStartedAt field restored. See [Platform Admin deployment instructions](docs/PLATFORM_ADMIN.md). The feature remains in draft and must pass builds and migration checks before live deployment.

@@ -119,6 +119,7 @@ model Message {
   lastError         String?       @db.VarChar(500)
   createdAt         DateTime      @default(now())
   processedAt       DateTime?
+  sendStartedAt     DateTime?
 
   @@unique([groupId, externalMessageId])
   @@index([status, nextAttemptAt])
@@ -188,4 +189,44 @@ model GatewayHealth {
   checkedAt   DateTime @default(now())
   changedAt   DateTime @default(now())
   alertedAt   DateTime?
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  VIEWER
+}
+
+model PlatformAdmin {
+  id           String            @id @default(cuid()) @db.VarChar(191)
+  email        String            @unique @db.VarChar(191)
+  displayName  String            @db.VarChar(100)
+  passwordHash String            @db.VarChar(255)
+  role         PlatformRole      @default(SUPER_ADMIN)
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  lastLoginAt  DateTime?
+  sessions     PlatformSession[]
+  auditEntries PlatformAudit[]
+}
+
+model PlatformSession {
+  id         String        @id @default(cuid()) @db.VarChar(191)
+  tokenHash  String        @unique @db.Char(64)
+  adminId    String        @db.VarChar(191)
+  admin      PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime      @default(now())
+
+  @@index([adminId, expiresAt])
+}
+
+model PlatformAudit {
+  id          String        @id @default(cuid()) @db.VarChar(191)
+  adminId     String        @db.VarChar(191)
+  admin       PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action      String        @db.VarChar(64)
+  targetId    String?       @db.VarChar(191)
+  createdAt   DateTime      @default(now())
+
+  @@index([createdAt])
 }

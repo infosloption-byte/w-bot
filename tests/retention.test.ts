@@ -17,6 +17,7 @@ test("retention purges completed message history in bounded batches", async () =
     },
     accountToken: { deleteMany: async () => ({ count: 0 }) },
     portalSession: { deleteMany: async () => ({ count: 0 }) },
+    platformSession: { deleteMany: async () => ({ count: 0 }) },
     groupActivation: { deleteMany: async () => ({ count: 0 }) },
     tenantAudit: { deleteMany: async () => ({ count: 0 }) }
   };

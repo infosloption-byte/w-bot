@@ -14,6 +14,7 @@ export async function runRetention(prisma: PrismaClient, cfg: Config) {
   if (old.length) await prisma.message.deleteMany({ where: { id: { in: old.map(x => x.id) } } });
   await prisma.accountToken.deleteMany({ where: { expiresAt: { lt: now } } });
   await prisma.portalSession.deleteMany({ where: { expiresAt: { lt: now } } });
+  await prisma.platformSession.deleteMany({ where: { expiresAt: { lt: now } } });
   await prisma.groupActivation.deleteMany({
     where: { expiresAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } }
   });
