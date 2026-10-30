@@ -75,7 +75,24 @@ test("mutating portal routes reject requests without custom CSRF header", async 
 
 test("invalid group claim is rejected without assigning ownership", async () => {
   let updated = false;
+  let catalogLookups = 0;
   const prisma = {
+    // Group activation now validates the active language catalog before
+    // processing claims. Mock that read so this test reaches the ownership
+    // guard rather than failing with an unrelated HTTP 500.
+    languageCatalog: {
+      findMany: async (args: { where: { enabled: boolean } }) => {
+        assert.equal(args.where.enabled, true);
+        catalogLookups++;
+        return [
+          { code: "he", name: "Hebrew" },
+          { code: "en", name: "English" },
+          { code: "si", name: "Sinhala" },
+          { code: "uz", name: "Uzbek" },
+          { code: "ru", name: "Russian" }
+        ];
+      }
+    },
     groupActivation: {
       findUnique: async () => ({
         id: "activation", tenantId: "tenant-a",
@@ -118,6 +135,7 @@ test("invalid group claim is rejected without assigning ownership", async () => 
     }
   });
   assert.equal(response.statusCode, 403);
+  assert.equal(catalogLookups, 1);
   assert.equal(updated, false);
   await app.close();
 });
