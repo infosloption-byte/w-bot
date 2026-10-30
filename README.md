@@ -89,3 +89,7 @@ A separate platform administrator account and operations console monitor multi-c
 ## Platform-managed translation languages
 
 The Platform Admin **Languages** module manages which translation targets customers may use. The original five remain enabled, with more language presets available to enable or custom language codes to add. Customers may select up to ten enabled languages per group. See [language catalogue and rollout](docs/LANGUAGE_CATALOG.md).
+
+## Responsive Customer and Platform Admin Portals
+
+Both portals support desktop collapsed/expanded sidebars (saved separately), off-canvas touch-friendly mobile/tablet navigation, adaptive group cards and forms, mobile-friendly labeled Platform Admin tables, accessible keyboard navigation and viewport-safe dialogs. Portal builds include responsive contract tests. See [Responsive portal rollout and device QA](docs/RESPONSIVE_PORTALS.md). No API/database or WhatsApp gateway changes are required.

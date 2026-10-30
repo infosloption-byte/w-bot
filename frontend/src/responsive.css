@@ -1,0 +1,175 @@
+/* Shared responsive navigation for both W-Bot portals */
+html,body,#root{min-width:0}
+.dashboard{min-width:0}
+.sidebar{z-index:25;transition:width .22s ease,transform .22s ease}
+.sidebar-header{display:flex;align-items:center;justify-content:space-between;gap:9px;margin:0 0 39px;padding:0 4px;min-width:0}
+.sidebar-header .brand{min-width:0;overflow:hidden;white-space:nowrap}
+.sidebar-brand-text{display:block;min-width:0;overflow:hidden}
+.sidebar-header .brand-mark{width:40px;height:40px}
+.sidebar-toggle,.sidebar-close,.sidebar-mobile-toggle{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;
+  width:38px;height:38px;border:1px solid #345061;background:#142636;
+  color:#c9e6ea;border-radius:10px;font-size:20px;
+}
+.sidebar-toggle:hover,.sidebar-close:hover,.sidebar-mobile-toggle:hover{background:#204046;color:#58e3ce}
+.sidebar-toggle{width:34px;height:34px;font-size:18px}
+.sidebar-close,.sidebar-mobile-toggle,.sidebar-scrim{display:none}
+.sidebar nav{min-width:0}
+.sidebar nav .nav-item,.sidebar-foot .nav-item{min-height:44px}
+.sidebar .nav-label{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar .nav-icon{flex:none;font-size:18px;width:23px;min-width:23px}
+.sidebar .profile-meta{min-width:0;overflow:hidden}
+.sidebar .profile-meta strong,.sidebar .profile-meta small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-scrim{background:#010912b8;border:0;cursor:pointer}
+.topbar-start{display:flex;gap:14px;align-items:center;min-width:0}
+.topbar-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard.nav-collapsed .sidebar{width:76px}
+.dashboard.nav-collapsed .sidebar-header{flex-direction:column;gap:15px;padding:0;align-items:center;margin-bottom:33px}
+.dashboard.nav-collapsed .sidebar-brand-text,.dashboard.nav-collapsed .sidebar-label,
+.dashboard.nav-collapsed .sidebar .nav-label,.dashboard.nav-collapsed .sidebar .connection,
+.dashboard.nav-collapsed .sidebar .profile-meta{display:none}
+.dashboard.nav-collapsed .sidebar .nav-item{justify-content:center;padding:12px 9px}
+.dashboard.nav-collapsed .sidebar .profile{justify-content:center;padding:19px 2px 12px}
+.dashboard.nav-collapsed .sidebar .avatar{flex:none}
+.dashboard.nav-collapsed .sidebar nav .nav-icon{margin:0}
+.dashboard.nav-collapsed .sidebar .signout{justify-content:center}
+.dashboard.nav-collapsed .sidebar .sidebar-toggle{width:34px;height:34px}
+.dashboard.nav-collapsed .sidebar-header .brand{overflow:visible}
+.dashboard.nav-collapsed .sidebar-header .brand-mark{width:42px;height:42px}
+.dashboard .main-area{min-width:0}
+.dashboard .workspace>*{min-width:0}
+.dashboard .panel{min-width:0}
+.dashboard .page-heading>div{min-width:0}
+.dashboard .group-title .grow{min-width:0}
+.dashboard .group-cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
+.dashboard .activation-code{flex-wrap:wrap;gap:10px}
+.dashboard .activation-code code{min-width:0;overflow-wrap:anywhere}
+.dashboard .copy-box{max-width:100%;overflow-wrap:anywhere}
+.dashboard .metric-value{overflow-wrap:anywhere}
+.dashboard .group-footer{gap:16px;flex-wrap:wrap}
+.dashboard .modal-backdrop{overflow-y:auto;overscroll-behavior:contain}
+.dashboard .modal-panel{max-height:min(92dvh,850px);overflow-y:auto}
+.dashboard .form input{min-width:0}
+.dashboard .language-chips .chip{min-height:40px}
+.dashboard .group-card .toggle{flex:none}
+.sidebar .nav-item:focus-visible,.sidebar-toggle:focus-visible,.sidebar-close:focus-visible,
+.sidebar-mobile-toggle:focus-visible{outline:2px solid #3ce1c0;outline-offset:3px}
+@media (min-width:901px) and (max-width:1200px){
+  .dashboard .workspace{padding:28px 25px 40px}
+  .dashboard .metric{padding:19px}
+  .dashboard .page-heading{gap:16px}
+}
+@media (max-width:900px){
+  .dashboard{display:block}
+  .dashboard .sidebar,.platform-dashboard .sidebar,.dashboard.nav-collapsed .sidebar{
+    position:fixed;z-index:60;top:0;left:0;bottom:0;height:100dvh;
+    width:min(320px,86vw);max-width:100%;padding:22px 18px;
+    transform:translateX(-105%);box-shadow:20px 0 65px #0009;
+    overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain
+  }
+  .dashboard .sidebar.is-mobile-open{transform:translateX(0)}
+  .dashboard .sidebar-scrim{display:block;position:fixed;inset:0;z-index:55;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .2s,visibility .2s}
+  .dashboard .sidebar-scrim.is-visible{opacity:1;visibility:visible;pointer-events:auto}
+  .dashboard .sidebar-header,.dashboard.nav-collapsed .sidebar-header{
+    display:flex;flex-direction:row;justify-content:space-between;
+    align-items:center;gap:12px;margin:0 0 28px;padding:0 2px
+  }
+  .dashboard .sidebar .brand,.dashboard.nav-collapsed .sidebar .brand{overflow:visible}
+  .dashboard .sidebar-brand-text,.dashboard.nav-collapsed .sidebar-brand-text{display:block}
+  .dashboard .sidebar nav,.dashboard.nav-collapsed .sidebar nav{display:grid;gap:7px;overflow:visible}
+  .dashboard .sidebar .nav-label,.dashboard.nav-collapsed .sidebar .nav-label{display:block}
+  .dashboard .sidebar .nav-item,.dashboard.nav-collapsed .sidebar .nav-item{display:flex;justify-content:flex-start;gap:13px;width:100%;padding:13px 14px;white-space:normal}
+  .dashboard .sidebar .nav-icon,.dashboard.nav-collapsed .sidebar .nav-icon{display:inline-flex}
+  .dashboard .sidebar-label,.dashboard.nav-collapsed .sidebar-label{display:block}
+  .dashboard .sidebar-foot,.dashboard.nav-collapsed .sidebar-foot{display:block;margin-top:35px}
+  .dashboard .sidebar .connection,.dashboard.nav-collapsed .sidebar .connection{display:block}
+  .dashboard .sidebar .profile,.dashboard.nav-collapsed .sidebar .profile{justify-content:flex-start}
+  .dashboard .sidebar .profile-meta,.dashboard.nav-collapsed .sidebar .profile-meta{display:block}
+  .dashboard .sidebar-close,.dashboard .sidebar-mobile-toggle{display:inline-flex}
+  .dashboard .sidebar-toggle{display:none}
+  .dashboard .topbar{height:64px;padding:0 20px;gap:12px}
+  .dashboard .topbar-start{gap:11px}
+  .dashboard .topbar-title{font-size:12px}
+  .dashboard .workspace{padding:25px 20px 42px}
+  .dashboard .sidebar .signout{justify-content:flex-start}
+  .dashboard .sidebar .sidebar-header .brand-mark{width:40px;height:40px}
+  .dashboard .metrics,.dashboard .platform-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard .page-heading{margin-bottom:26px}
+  .dashboard .group-cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+  .auth-layout{grid-template-columns:1fr}
+  .auth-hero{min-height:300px;padding:28px}
+  .auth-hero-body{margin:35px 0}
+  .auth-panel{padding:36px 24px 64px}
+  .platform-login{grid-template-columns:1fr}
+  .platform-login-intro{min-height:310px;padding:32px}
+  .platform-login-intro .brand{margin-bottom:20px}
+  .platform-login-note{margin-top:16px}
+  .platform-login-form{padding:30px 22px 55px}
+}
+@media (max-width:640px){
+  .dashboard .topbar{height:60px;padding:0 14px}
+  .dashboard .topbar .pill{font-size:9px;padding:7px 9px}
+  .dashboard .breadcrumb{display:none}
+  .dashboard .workspace{padding:20px 14px 34px}
+  .dashboard .metrics,.dashboard .platform-metrics,.dashboard .two-column,.dashboard .activation-layout,
+  .dashboard .account-grid,.dashboard .language-admin-layout{grid-template-columns:minmax(0,1fr)}
+  .dashboard .page-heading{display:grid;gap:17px;margin-bottom:20px}
+  .dashboard .page-heading h1{font-size:clamp(23px,7vw,30px)}
+  .dashboard .page-heading .button{width:100%;justify-content:center}
+  .dashboard .metric{min-height:140px;padding:19px}
+  .dashboard .metric-value{font-size:34px}
+  .dashboard .panel{padding:17px}
+  .dashboard .step{gap:10px;padding:20px 0}
+  .dashboard .step-number{width:32px;height:32px}
+  .dashboard .copy-box{flex-wrap:wrap;gap:8px}
+  .dashboard .group-title{align-items:flex-start}
+  .dashboard .group-title .status{margin-left:auto}
+  .dashboard .group-footer{align-items:flex-start}
+  .dashboard .activation-code{align-items:flex-start}
+  .dashboard .modal-backdrop{padding:12px}
+  .dashboard .modal-panel{padding:20px;border-radius:14px;width:100%}
+  .dashboard .modal-panel h2{font-size:22px}
+  .dashboard .modal-actions{display:grid;grid-template-columns:1fr}
+  .dashboard .modal-actions .button{width:100%}
+  .dashboard .detail{flex-wrap:wrap;gap:5px}
+  .dashboard .detail strong{text-align:left}
+  .dashboard .platform-toolbar{display:grid;gap:14px}
+  .dashboard .platform-search{width:100%;min-width:0}
+  .dashboard .platform-language-create{min-width:0}
+  .dashboard .alert{overflow-wrap:anywhere}
+  .dashboard .footer{padding:17px 14px;line-height:1.6}
+  .auth-hero{min-height:260px}
+  .auth-hero h1{font-size:clamp(29px,8vw,38px)}
+  .auth-hero-body>p{font-size:14px}
+  .auth-panel{padding:28px 18px 50px}
+  .platform-login-intro h1{font-size:clamp(28px,8vw,37px)}
+  .platform-login-form{padding:22px 14px 44px}
+  .platform-login-form .panel{padding:20px}
+  .account-screen{padding:14px}
+  .account-card{padding:21px}
+}
+@media (max-width:700px){
+  .dashboard .platform-table-scroll{overflow:visible}
+  .dashboard table.platform-table,.dashboard .platform-table tbody,.dashboard .platform-table tr,
+  .dashboard .platform-table td{display:block;width:100%;min-width:0}
+  .dashboard .platform-table thead{display:none}
+  .dashboard .platform-table tr{border:1px solid #2d4457;border-radius:13px;background:#122132;padding:10px 13px;margin:0 0 12px}
+  .dashboard .platform-table td{display:grid;grid-template-columns:minmax(85px,35%) minmax(0,1fr);gap:10px;align-items:center;
+    border:0;padding:10px 0;white-space:normal;overflow-wrap:anywhere;font-size:12px}
+  .dashboard .platform-table td:not(:last-child){border-bottom:1px solid #ffffff0f}
+  .dashboard .platform-table td::before{content:attr(data-label);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#819caa;font-weight:800}
+  .dashboard .platform-table td .text-button{min-height:38px}
+  .dashboard .platform-table td small{white-space:normal}
+  .dashboard .platform-table td .status{justify-self:start}
+}
+@media (prefers-reduced-motion:reduce){
+  .sidebar,.sidebar-scrim{transition:none!important}
+}
+
+/* Avoid iOS zooming password/profile forms and allow for device safe areas. */
+@media(max-width:900px){
+  .sidebar.is-mobile-open{padding-top:max(22px,env(safe-area-inset-top));padding-bottom:max(22px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+  .auth-panel .form input,.platform-login-form .form input,.dashboard .form input,
+  .dashboard .platform-search{font-size:16px}
+  .dashboard .modal-panel{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+}

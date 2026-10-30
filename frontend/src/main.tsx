@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import "./responsive.css";
+import { useSidebar } from "./useSidebar.js";
 import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
 
 type View = "overview" | "groups" | "activate" | "settings" | "activity";
@@ -42,6 +44,7 @@ async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 function App() {
   const [me, setMe] = useState<Me | null>(null);
+  const sidebar = useSidebar("wbot-customer-sidebar-collapsed");
   const [usage, setUsage] = useState<Usage | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -222,24 +225,53 @@ function App() {
     { id: "activity", label: "Activity & Plan", icon: "◷" }
   ];
   return (
-    <div className="dashboard">
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">W</span><span>W-Bot<small>WORKSPACE</small></span></div>
+    <div className={"dashboard" + (sidebar.collapsed ? " nav-collapsed" : "")}>
+      <button type="button" className={"sidebar-scrim" + (sidebar.mobileOpen ? " is-visible" : "")}
+        aria-label="Close workspace navigation" tabIndex={sidebar.mobileOpen ? 0 : -1}
+        onClick={sidebar.closeMobile}/>
+      <aside className={"sidebar" + (sidebar.mobileOpen ? " is-mobile-open" : "")}
+        id="customer-navigation" aria-label="Workspace sidebar"
+        ref={sidebar.drawerRef} role={sidebar.mobileOpen ? "dialog" : undefined}
+        aria-modal={sidebar.mobileOpen ? true : undefined}>
+        <div className="sidebar-header">
+          <div className="brand"><span className="brand-mark">W</span><span className="sidebar-brand-text">W-Bot<small>WORKSPACE</small></span></div>
+          <button type="button" className="sidebar-toggle" onClick={sidebar.toggleCollapsed}
+            aria-controls="customer-navigation"
+            aria-label={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebar.collapsed}>{sidebar.collapsed ? "»" : "«"}</button>
+          <button type="button" className="sidebar-close" onClick={sidebar.closeMobile}
+            aria-label="Close menu" title="Close menu">×</button>
+        </div>
         <p className="sidebar-label">MENU</p>
         <nav aria-label="Workspace navigation">{nav.map(item =>
-          <button key={item.id} type="button" className={"nav-item " + (view === item.id ? "active" : "")} onClick={() => { setView(item.id); setNotice(""); setError(""); }}>
-            <span className="nav-icon">{item.icon}</span>{item.label}
+          <button key={item.id} type="button" aria-label={item.label}
+            title={sidebar.collapsed ? item.label : undefined}
+            aria-current={view === item.id ? "page" : undefined}
+            className={"nav-item " + (view === item.id ? "active" : "")}
+            onClick={() => { setView(item.id); setNotice(""); setError(""); sidebar.closeMobile(); }}>
+            <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
           </button>
         )}</nav>
         <div className="sidebar-foot">
           <div className="connection"><span className="live-dot"/> SHARED BOT · PILOT</div>
-          <div className="profile"><div className="avatar">{me.user.name[0]?.toUpperCase()}</div><div><strong>{me.user.name}</strong><small>{me.workspace.name}</small></div></div>
-          <button type="button" onClick={() => void logout()} className="nav-item signout">↪ &nbsp;Sign out</button>
+          <div className="profile"><div className="avatar">{me.user.name[0]?.toUpperCase()}</div><div className="profile-meta"><strong>{me.user.name}</strong><small>{me.workspace.name}</small></div></div>
+          <button type="button" aria-label="Sign out" title={sidebar.collapsed ? "Sign out" : undefined}
+            onClick={() => { sidebar.closeMobile(); void logout(); }} className="nav-item signout">
+            <span className="nav-icon" aria-hidden="true">↪</span><span className="nav-label">Sign out</span>
+          </button>
         </div>
       </aside>
-
       <div className="main-area">
-        <header className="topbar"><div><span className="breadcrumb">WORKSPACE / </span><span>{nav.find(item => item.id === view)?.label}</span></div><div className="pill pilot">◉ INVITE-ONLY PILOT</div></header>
+        <header className="topbar">
+          <div className="topbar-start">
+            <button type="button" className="sidebar-mobile-toggle" aria-label="Open workspace menu"
+              ref={sidebar.toggleRef} aria-controls="customer-navigation" aria-expanded={sidebar.mobileOpen}
+              onClick={sidebar.toggleMobile}>☰</button>
+            <div className="topbar-title"><span className="breadcrumb">WORKSPACE / </span><span>{nav.find(item => item.id === view)?.label}</span></div>
+          </div>
+          <div className="pill pilot">◉ INVITE-ONLY PILOT</div>
+        </header>
         <main className="workspace">
           {notice && <div className="alert success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss">×</button></div>}
           {error && <div className="alert error" role="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss">×</button></div>}

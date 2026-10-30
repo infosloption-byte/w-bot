@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json tsconfig.json vite.config.ts index.html platform.html ./
 RUN npm install --no-audit --no-fund
 COPY src ./src
+COPY tests ./tests
 RUN npm run build
 
 FROM nginx:1.27-alpine

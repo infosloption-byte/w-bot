@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import "./platform.css";
+import "./responsive.css";
+import { useSidebar } from "./useSidebar.js";
 
 type Admin = { id: string; name: string; email: string; role: "SUPER_ADMIN" | "VIEWER"; lastLoginAt: string | null };
 type Overview = { tenants: number; users: number; groups: number; enabledGroups: number;
@@ -51,6 +53,7 @@ const formatted = (value: string | null) => value ? new Date(value).toLocaleStri
 
 function Console() {
   const [admin, setAdmin] = useState<Admin | null>(null);
+  const sidebar = useSidebar("wbot-platform-sidebar-collapsed");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -244,26 +247,52 @@ function Console() {
     { key: "activity", label: "Audit & Activity", icon: "◷" },
     { key: "security", label: "Admin Security", icon: "⚙" }
   ];
-  return <div className="dashboard platform-dashboard">
-    <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">W</span><span>W-Bot<small>PLATFORM ADMIN</small></span></div>
+  return <div className={"dashboard platform-dashboard" + (sidebar.collapsed ? " nav-collapsed" : "")}>
+    <button type="button" className={"sidebar-scrim" + (sidebar.mobileOpen ? " is-visible" : "")}
+      aria-label="Close platform navigation" tabIndex={sidebar.mobileOpen ? 0 : -1}
+      onClick={sidebar.closeMobile}/>
+    <aside className={"sidebar" + (sidebar.mobileOpen ? " is-mobile-open" : "")}
+      id="platform-navigation" aria-label="Platform sidebar"
+        ref={sidebar.drawerRef} role={sidebar.mobileOpen ? "dialog" : undefined}
+        aria-modal={sidebar.mobileOpen ? true : undefined}>
+      <div className="sidebar-header">
+        <div className="brand"><span className="brand-mark">W</span><span className="sidebar-brand-text">W-Bot<small>PLATFORM ADMIN</small></span></div>
+        <button type="button" className="sidebar-toggle" onClick={sidebar.toggleCollapsed}
+          aria-controls="platform-navigation"
+            aria-label={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!sidebar.collapsed}>{sidebar.collapsed ? "»" : "«"}</button>
+        <button type="button" className="sidebar-close" onClick={sidebar.closeMobile}
+          aria-label="Close menu" title="Close menu">×</button>
+      </div>
       <p className="sidebar-label">OPERATIONS</p>
       <nav aria-label="Platform navigation">{nav.map(item =>
-        <button key={item.key} className={"nav-item " + (view === item.key ? "active" : "")}
-          onClick={() => { setView(item.key); setNotice(""); setError(""); }}>
-          <span className="nav-icon">{item.icon}</span>{item.label}
+        <button key={item.key} type="button" aria-label={item.label}
+          title={sidebar.collapsed ? item.label : undefined}
+          aria-current={view === item.key ? "page" : undefined}
+          className={"nav-item " + (view === item.key ? "active" : "")}
+          onClick={() => { setView(item.key); setNotice(""); setError(""); sidebar.closeMobile(); }}>
+          <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
         </button>
       )}</nav>
       <div className="sidebar-foot">
         <div className="connection"><span className="live-dot"/> PLATFORM MONITORING</div>
         <div className="profile"><div className="avatar">{admin.name[0]?.toUpperCase()}</div>
-          <div><strong>{admin.name}</strong><small>{admin.role.replace("_", " ")}</small></div></div>
-        <button className="nav-item signout" onClick={() => void logout()}>↪ &nbsp;Sign out</button>
+          <div className="profile-meta"><strong>{admin.name}</strong><small>{admin.role.replace("_", " ")}</small></div></div>
+        <button type="button" aria-label="Sign out" title={sidebar.collapsed ? "Sign out" : undefined}
+          className="nav-item signout" onClick={() => { sidebar.closeMobile(); void logout(); }}>
+          <span className="nav-icon" aria-hidden="true">↪</span><span className="nav-label">Sign out</span>
+        </button>
       </div>
     </aside>
     <div className="main-area">
       <header className="topbar">
-        <div><span className="breadcrumb">PLATFORM / </span>{nav.find(n => n.key === view)?.label}</div>
+        <div className="topbar-start">
+          <button type="button" className="sidebar-mobile-toggle" aria-label="Open platform menu"
+            ref={sidebar.toggleRef} aria-controls="platform-navigation" aria-expanded={sidebar.mobileOpen}
+            onClick={sidebar.toggleMobile}>☰</button>
+          <div className="topbar-title"><span className="breadcrumb">PLATFORM / </span>{nav.find(n => n.key === view)?.label}</div>
+        </div>
         <div className="pill pilot">◉ ADMINISTRATION</div>
       </header>
       <main className="workspace">
@@ -308,12 +337,12 @@ function Console() {
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
             <th>Workspace</th><th>Owner</th><th>Groups</th><th>Subscription</th><th>Monthly usage</th><th>Action</th>
           </tr></thead><tbody>{filteredTenants.map(t => <tr key={t.id}>
-            <td><strong>{t.name}</strong><small>{formatted(t.createdAt)}</small></td>
-            <td>{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
-            <td>{t.groupCount}</td>
-            <td><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
-            <td>{t.monthUsage.toLocaleString()} / {t.subscription?.monthlyMessages ?? "—"}</td>
-            <td>{admin.role === "SUPER_ADMIN" &&
+            <td data-label="Workspace"><strong>{t.name}</strong><small>{formatted(t.createdAt)}</small></td>
+            <td data-label="Owner">{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
+            <td data-label="Groups">{t.groupCount}</td>
+            <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
+            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} / {t.subscription?.monthlyMessages ?? "—"}</td>
+            <td data-label="Action">{admin.role === "SUPER_ADMIN" &&
               <button className="text-button" onClick={() => editPlan(t)}>Manage plan</button>}</td>
           </tr>)}</tbody></table></div>
           {!filteredTenants.length && <p className="muted">No matching customers.</p>}
@@ -323,9 +352,9 @@ function Console() {
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
             <th>User</th><th>Email</th><th>Workspace roles</th><th>Email verified</th><th>Registered</th>
           </tr></thead><tbody>{users.map(u => <tr key={u.id}>
-            <td><strong>{u.displayName}</strong></td><td>{u.email}</td>
-            <td>{u.memberships.map(m => m.tenant.name + " (" + m.role + ")").join(", ") || "—"}</td>
-            <td>{u.emailVerifiedAt ? "Verified" : "Unverified"}</td><td>{formatted(u.createdAt)}</td>
+            <td data-label="User"><strong>{u.displayName}</strong></td><td data-label="Email">{u.email}</td>
+            <td data-label="Workspace roles">{u.memberships.map(m => m.tenant.name + " (" + m.role + ")").join(", ") || "—"}</td>
+            <td data-label="Email verified">{u.emailVerifiedAt ? "Verified" : "Unverified"}</td><td data-label="Registered">{formatted(u.createdAt)}</td>
           </tr>)}</tbody></table></div>
         </section>}
         {view === "groups" && <section className="panel platform-panel">
@@ -333,10 +362,10 @@ function Console() {
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
             <th>Group</th><th>Workspace</th><th>Gateway</th><th>Status</th><th>Messages stored</th><th>Action</th>
           </tr></thead><tbody>{groups.map(g => <tr key={g.id}>
-            <td><strong>{g.name}</strong><small>{formatted(g.updatedAt)}</small></td><td>{g.tenant?.name ?? "Unclaimed"}</td>
-            <td>{g.gateway}</td><td><span className={"status " + (g.enabled ? "on" : "")}>{g.enabled ? "Active" : "Paused"}</span></td>
-            <td>{g._count.messages}</td>
-            <td>{admin.role === "SUPER_ADMIN" && <button className="text-button" onClick={() => setPendingGroup(g)}>
+            <td data-label="Group"><strong>{g.name}</strong><small>{formatted(g.updatedAt)}</small></td><td data-label="Workspace">{g.tenant?.name ?? "Unclaimed"}</td>
+            <td data-label="Gateway">{g.gateway}</td><td data-label="Status"><span className={"status " + (g.enabled ? "on" : "")}>{g.enabled ? "Active" : "Paused"}</span></td>
+            <td data-label="Messages stored">{g._count.messages}</td>
+            <td data-label="Action">{admin.role === "SUPER_ADMIN" && <button className="text-button" onClick={() => setPendingGroup(g)}>
               {g.enabled ? "Pause" : "Enable"}</button>}</td>
           </tr>)}</tbody></table></div>
         </section>}
@@ -355,11 +384,11 @@ function Console() {
               <tbody>{catalog.filter(lang =>
                 (lang.name + " " + lang.code).toLowerCase().includes(languageSearch.toLowerCase())
               ).map(lang => <tr key={lang.code}>
-                <td><strong>{lang.name}</strong></td>
-                <td><code>{lang.code}</code></td>
-                <td><span className={"status " + (lang.enabled ? "on" : "")}>
+                <td data-label="Language"><strong>{lang.name}</strong></td>
+                <td data-label="ISO code"><code>{lang.code}</code></td>
+                <td data-label="Availability"><span className={"status " + (lang.enabled ? "on" : "")}>
                   {lang.enabled ? "Enabled" : "Disabled"}</span></td>
-                <td>{admin.role === "SUPER_ADMIN" && <>
+                <td data-label="Action">{admin.role === "SUPER_ADMIN" && <>
                   <button type="button" className="text-button" disabled={busy}
                     onClick={() => void changeLanguage(lang, !lang.enabled)}>
                     {lang.enabled ? "Disable" : "Enable"}</button>
@@ -403,8 +432,8 @@ function Console() {
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
             <th>Group</th><th>Workspace</th><th>Status</th><th>Attempts</th><th>Received</th>
           </tr></thead><tbody>{deliveries.map(d => <tr key={d.id}>
-            <td>{d.group.name}</td><td>{d.group.tenant?.name ?? "Unclaimed"}</td>
-            <td><span className="status">{d.status}</span></td><td>{d.attempts}</td><td>{formatted(d.createdAt)}</td>
+            <td data-label="Group">{d.group.name}</td><td data-label="Workspace">{d.group.tenant?.name ?? "Unclaimed"}</td>
+            <td data-label="Status"><span className="status">{d.status}</span></td><td data-label="Attempts">{d.attempts}</td><td data-label="Received">{formatted(d.createdAt)}</td>
           </tr>)}</tbody></table></div>{!deliveries.length && <p className="muted">No recorded delivery problems.</p>}
         </section>}
         {view === "activity" && <div className="two-column">

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5176",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build && npm run test:responsive",
+    "test:responsive": "node --test tests/responsive.test.mjs"
   },
   "dependencies": {
     "react": "^19.1.1",
