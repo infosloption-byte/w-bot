@@ -77,3 +77,7 @@ Outgoing WhatsApp replies always contain Hebrew, English, Sinhala, Uzbek, and Ru
 ## Multi-customer Model B pilot
 
 Model B is being developed on the feature/model-b-shared-number-saas branch. Customers register an invite-only workspace, add the shared W-Bot number to a group, and ask an actual WhatsApp group admin to send a one-time activation command. Groups and usage are tenant-scoped, with a separate React dashboard. The existing Baileys session and Gemini translation service remain intact. Read [Model B Pilot](docs/MODEL_B_PILOT.md) before deployment. Baileys remains unofficial and is not an authorized commercial WhatsApp Groups API.
+
+## Model B SaaS — account security, isolation, quotas and reliability
+
+The Model B hardening build adds email/password recovery, tenant-scoped audit history, group lifecycle and privacy controls, atomic message allowance enforcement, operator-managed subscription status, gateway health checks, and safer queue recovery. The implementation remains an **invite-only pilot**, not an authorized WhatsApp commercial integration. See [Model B hardening and deployment](docs/MODEL_B_HARDENING.md) for the backup/migration sequence, SMTP requirements and acceptance tests.

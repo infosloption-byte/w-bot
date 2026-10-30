@@ -9,6 +9,9 @@ import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
 import { isWebGroupId, type GatewayKind } from "./gateways.js";
 import { registerPortalRoutes } from "./portal.js";
+import { ingestTenantMessage } from "./quotas.js";
+import { runRetention } from "./retention.js";
+import { checkGatewayHealth } from "./gateway-health.js";
 
 const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
@@ -93,22 +96,11 @@ async function enqueue(groupId: string, messageId: string, senderId: string, tex
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
   if (!group || !group.enabled || group.gateway !== gateway) return false; // fail closed: channel-locked allowlist
   if (group.tenantId) {
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const tenantGroups = await prisma.group.findMany({
-      where: { tenantId: group.tenantId },
-      select: { id: true, claimedAt: true }
+    if (!group.consentAt) return false;
+    return ingestTenantMessage(prisma, cfg, {
+      tenantId: group.tenantId, groupId: group.id,
+      messageId, senderId, text
     });
-    const windows = tenantGroups.map(g => ({
-      groupId: g.id,
-      createdAt: {
-        gte: g.claimedAt && g.claimedAt > monthStart ? g.claimedAt : monthStart
-      }
-    }));
-    const used = windows.length
-      ? await prisma.message.count({ where: { OR: windows } })
-      : 0;
-    if (used >= cfg.SAAS_MONTHLY_MESSAGES) return false; // quota gate for pilot
   }
   const saved = await prisma.message.createMany({
     data: [{ groupId: group.id, externalMessageId: messageId, senderId, originalText: text }],
@@ -192,6 +184,91 @@ app.get("/api/web/groups", async (_request, reply) => {
   }
 });
 
+const reconcileSchema = z.object({
+  action: z.enum(["mark_delivered", "retry"])
+}).strict();
+
+// Delivery-uncertain events are *never* automatically resent. An operator must
+// inspect WhatsApp delivery history before choosing to retry (possible duplicate).
+app.post<{ Params: { id: string } }>("/api/messages/:id/reconcile",
+  async (request, reply) => {
+    const input = reconcileSchema.parse(request.body);
+    const msg = await prisma.message.findUnique({
+      where: { id: request.params.id }, include: { group: true }
+    });
+    if (!msg || !["DELIVERY_UNCERTAIN", "FAILED"].includes(msg.status)) {
+      return reply.code(404).send({ error: "Message not available for reconciliation" });
+    }
+    const updated = await prisma.message.updateMany({
+      where: { id: msg.id, status: { in: ["DELIVERY_UNCERTAIN", "FAILED"] } },
+      data: input.action === "retry"
+        ? {
+            status: "PENDING", sendStartedAt: null,
+            nextAttemptAt: new Date(), lastError: "Manual retry approved by operator"
+          }
+        : {
+            status: "COMPLETED", sendStartedAt: null,
+            processedAt: new Date(), lastError: "Operator confirmed delivery"
+          }
+    });
+    if (!updated.count) return reply.code(409).send({ error: "Message state changed" });
+    if (msg.group.tenantId) await prisma.tenantAudit.create({
+      data: {
+        tenantId: msg.group.tenantId, groupId: msg.groupId,
+        action: input.action === "retry" ? "DELIVERY_RETRY_BY_OPERATOR" : "DELIVERY_CONFIRMED_BY_OPERATOR"
+      }
+    });
+    return { reconciled: true, action: input.action };
+  }
+);
+
+const planAdminSchema = z.object({
+  planCode: z.string().trim().regex(/^[A-Z0-9_-]{2,30}$/),
+  status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
+  groupLimit: z.number().int().min(0).max(1000),
+  monthlyMessages: z.number().int().min(0).max(1_000_000),
+  periodEnd: z.string().datetime().nullable().optional()
+}).strict();
+
+// This path is covered by the existing global ADMIN_API_KEY authentication and
+// must remain bound to localhost; customers cannot change their own plan.
+app.patch<{ Params: { tenantId: string } }>("/api/tenants/:tenantId/subscription",
+  async (request, reply) => {
+    const body = planAdminSchema.parse(request.body);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: request.params.tenantId }, select: { id: true }
+    });
+    if (!tenant) return reply.code(404).send({ error: "Workspace not found" });
+    const plan = await prisma.tenantSubscription.upsert({
+      where: { tenantId: tenant.id },
+      create: {
+        tenantId: tenant.id,
+        planCode: body.planCode, status: body.status,
+        groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+        periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
+      },
+      update: {
+        planCode: body.planCode, status: body.status,
+        groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+        periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
+      }
+    });
+    await prisma.tenantAudit.create({
+      data: { tenantId: tenant.id, action: "PLAN_UPDATED_BY_OPERATOR" }
+    });
+    return {
+      tenantId: tenant.id, planCode: plan.planCode, status: plan.status,
+      groups: plan.groupLimit, messagesPerMonth: plan.monthlyMessages,
+      periodEnd: plan.periodEnd
+    };
+  }
+);
+
+app.get("/api/ops/health", async () => ({
+  gateway: await prisma.gatewayHealth.findUnique({ where: { name: "web" } }),
+  retentionDays: cfg.MESSAGE_RETENTION_DAYS
+}));
+
 app.get("/api/languages", async () => ({
   languages: DEFAULT_TARGET_LANGUAGES.map(code => ({ code, name: LANGUAGE_NAMES[code] })),
   defaultTargetLanguages: [...DEFAULT_TARGET_LANGUAGES]
@@ -254,6 +331,29 @@ app.post("/api/simulate", async (request, reply) => {
   return reply.code(202).send({ accepted: true, note: "Translation will be processed asynchronously; no WhatsApp message is sent." });
 });
 
+// Periodic cleanup and connection health operate independently of translation.
+let maintenance = false;
+const maintenanceTimer = setInterval(async () => {
+  if (maintenance) return;
+  maintenance = true;
+  try {
+    await runRetention(prisma, cfg);
+  } catch (err) {
+    app.log.error({ err }, "Retention cycle failed");
+  } finally { maintenance = false; }
+}, 60 * 60_000);
+maintenanceTimer.unref();
+
+let checkingConnection = false;
+const healthTimer = setInterval(async () => {
+  if (checkingConnection) return;
+  checkingConnection = true;
+  try { await checkGatewayHealth(prisma, cfg); }
+  catch (err) { app.log.error({ err }, "Gateway monitoring cycle failed"); }
+  finally { checkingConnection = false; }
+}, 30_000);
+healthTimer.unref();
+
 let processing = false;
 const timer = setInterval(async () => {
   if (processing) return;
@@ -266,6 +366,8 @@ timer.unref();
 
 async function shutdown() {
   clearInterval(timer);
+  clearInterval(maintenanceTimer);
+  clearInterval(healthTimer);
   await app.close();
   await prisma.$disconnect();
 }

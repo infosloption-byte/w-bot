@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
 
-type View = "overview" | "groups" | "activate" | "settings";
+type View = "overview" | "groups" | "activate" | "settings" | "activity";
 type Group = {
   id: string; name: string; whatsappGroupId: string;
   enabled: boolean; gateway: "WEB" | "OFFICIAL";
   targetLanguages: string[]; claimedAt: string | null;
 };
 type Me = {
-  user: { name: string; email: string };
+  user: { name: string; email: string; emailVerified?: boolean };
   workspace: { name: string; id: string; role: string };
   botPhoneNumber: string | null;
   limits: { groups: number; messagesPerMonth: number };
@@ -52,9 +53,12 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [activation, setActivation] = useState<{ code: string; expiresAt: string } | null>(null);
-  const [loginMode, setLoginMode] = useState<"login" | "signup">("login");
+  const [loginMode, setLoginMode] = useState<"login" | "signup" | "forgot">("login");
+  const [openTokenView, setOpenTokenView] = useState(Boolean(new URLSearchParams(window.location.search).get("token")));
+  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingDisconnect, setPendingDisconnect] = useState<Group | null>(null);
+  const [pendingHistoryDelete, setPendingHistoryDelete] = useState<Group | null>(null);
 
   const refresh = useCallback(async () => {
     const account = await api<Me>("/me");
@@ -87,11 +91,16 @@ function App() {
     setError("");
     const data = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
-      await api("/auth/" + (loginMode === "login" ? "login" : "register"), {
-        method: "POST", body: JSON.stringify(data)
-      });
-      await refresh();
-      report("Welcome to your W-Bot workspace");
+      if (loginMode === "forgot") {
+        await portalRequest("/auth/forgot-password", { email: data.email });
+        report("If that email exists and mail delivery is configured, a reset link has been sent.");
+      } else {
+        await api("/auth/" + (loginMode === "login" ? "login" : "register"), {
+          method: "POST", body: JSON.stringify(data)
+        });
+        await refresh();
+        report("Welcome to your W-Bot workspace");
+      }
     } catch (err) { reportError(err); }
     finally { setBusy(false); }
   }
@@ -106,7 +115,7 @@ function App() {
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await api<{ code: string; expiresAt: string }>("/activations", {
-        method: "POST", body: "{}"
+        method: "POST", body: JSON.stringify({ consentConfirmed: consent })
       });
       setActivation(result);
       report("Activation code created. Ask a group administrator to post it in the group.");
@@ -137,6 +146,19 @@ function App() {
     finally { setBusy(false); }
   }
 
+  async function deleteGroupHistory(group: Group) {
+    setBusy(true); setError("");
+    try {
+      const result = await portalRequest<{ deleted: number }>(
+        "/groups/" + encodeURIComponent(group.id) + "/messages", undefined, "DELETE"
+      );
+      await refresh();
+      setPendingHistoryDelete(null);
+      report(result.deleted + " stored message records deleted for this group.");
+    } catch (err) { reportError(err); }
+    finally { setBusy(false); }
+  }
+
   async function copyText(value: string) {
     try { await navigator.clipboard.writeText(value); report("Copied to clipboard"); }
     catch { reportError(new Error("Unable to copy. Select and copy the command manually.")); }
@@ -145,6 +167,12 @@ function App() {
   if (loading) return (
     <div className="loading-shell"><div className="brand-mark">W</div><p>Loading your workspace…</p></div>
   );
+
+  if (openTokenView) return <PublicRecovery onReturn={() => {
+    window.history.replaceState({}, "", "/portal/");
+    setOpenTokenView(false);
+    setMe(null);
+  }} />;
 
   if (!me) return (
     <main className="auth-layout">
@@ -161,8 +189,8 @@ function App() {
       <section className="auth-panel">
         <div className="auth-box">
           <div className="eyebrow">CUSTOMER PORTAL</div>
-          <h2>{loginMode === "login" ? "Welcome back" : "Create your workspace"}</h2>
-          <p className="muted">{loginMode === "login" ? "Sign in to manage your WhatsApp translation groups." : "Start your invite-only W-Bot pilot."}</p>
+          <h2>{loginMode === "login" ? "Welcome back" : loginMode === "forgot" ? "Reset your password" : "Create your workspace"}</h2>
+          <p className="muted">{loginMode === "login" ? "Sign in to manage your WhatsApp translation groups." : loginMode === "forgot" ? "Enter your email to request a secure reset link." : "Start your invite-only W-Bot pilot."}</p>
           {error && <div className="alert error" role="alert">{error}</div>}
           <form onSubmit={e => void submitAuth(e)} className="form">
             {loginMode === "signup" && <>
@@ -170,12 +198,15 @@ function App() {
               <label>Workspace name<input name="workspace" type="text" required minLength={2} maxLength={191} placeholder="My company or team"/></label>
             </>}
             <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="you@company.com"/></label>
-            <label>Password<input name="password" type="password" required minLength={loginMode === "signup" ? 12 : 1} autoComplete={loginMode === "signup" ? "new-password" : "current-password"} placeholder={loginMode === "signup" ? "At least 12 characters" : "Your password"}/></label>
+            {loginMode !== "forgot" && <label>Password<input name="password" type="password" required minLength={loginMode === "signup" ? 12 : 1} autoComplete={loginMode === "signup" ? "new-password" : "current-password"} placeholder={loginMode === "signup" ? "At least 12 characters" : "Your password"}/></label>}
             {loginMode === "signup" && <label>Invitation code<input name="inviteCode" type="password" required placeholder="Provided by W-Bot"/></label>}
-            <button type="submit" disabled={busy} className="button primary">{busy ? "Working…" : loginMode === "login" ? "Sign in" : "Create workspace"}<span>→</span></button>
+            <button type="submit" disabled={busy} className="button primary">{busy ? "Working…" : loginMode === "login" ? "Sign in" : loginMode === "forgot" ? "Send reset link" : "Create workspace"}<span>→</span></button>
           </form>
           <div className="auth-switch">{loginMode === "login" ? "Invited to the pilot?" : "Already registered?"}{" "}
             <button type="button" className="text-button" onClick={() => { setLoginMode(loginMode === "login" ? "signup" : "login"); setError(""); }}>{loginMode === "login" ? "Create an account" : "Sign in"}</button>
+            {loginMode === "login" && <div style={{ marginTop: 16 }}>
+              <button type="button" className="text-button" onClick={() => { setLoginMode("forgot"); setError(""); }}>Forgot password?</button>
+            </div>}
           </div>
         </div>
       </section>
@@ -186,7 +217,8 @@ function App() {
     { id: "overview", label: "Overview", icon: "▦" },
     { id: "groups", label: "My Groups", icon: "☰" },
     { id: "activate", label: "Add Group", icon: "+" },
-    { id: "settings", label: "Workspace", icon: "⚙" }
+    { id: "settings", label: "Workspace", icon: "⚙" },
+    { id: "activity", label: "Activity & Plan", icon: "◷" }
   ];
   return (
     <div className="dashboard">
@@ -249,7 +281,9 @@ function App() {
                         : [...group.targetLanguages, lang.code]
                     })}>{selected ? "✓ " : "+ "}{lang.name}</button>;
                 })}</div>
-                <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => setPendingDisconnect(group)}>Disconnect group</button></div>
+                <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => setPendingDisconnect(group)}>Disconnect group</button>
+                    <button className="text-button danger-action" type="button" disabled={busy}
+                      style={{ marginLeft: 18 }} onClick={() => setPendingHistoryDelete(group)}>Delete message history</button></div>
                   <button type="button" className={"toggle " + (group.enabled ? "is-on" : "")} aria-label={group.enabled ? "Pause group" : "Enable group"} aria-pressed={group.enabled} disabled={busy} onClick={() => void updateGroup(group, { enabled: !group.enabled })}><span/></button></div>
               </section>
             )}</div>
@@ -261,7 +295,10 @@ function App() {
               <div className="panel steps">
                 <div className="step"><span className="step-number">01</span><div><h3>Add the W-Bot number</h3><p>In WhatsApp, open the group and add the W-Bot WhatsApp Business account as a participant.</p>{me.botPhoneNumber ? <button className="copy-box" onClick={() => void copyText(me.botPhoneNumber!)}>{me.botPhoneNumber} <span>Copy</span></button> : <p className="hint">The W-Bot phone number will be provided by your administrator.</p>}</div></div>
                 <div className="step"><span className="step-number">02</span><div><h3>Generate an activation code</h3><p>Create a one-time code valid for 15 minutes. The code belongs to your workspace.</p>
-                  <button className="button secondary" disabled={busy || groups.length >= me.limits.groups} onClick={() => void createActivation()}>{busy ? "Generating…" : "Generate activation code"}</button>
+                  <label className="consent-row"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />
+                    <span>I am authorized to manage this group, and its participants have been informed that messages are processed by W-Bot and an external AI translation service.</span>
+                  </label>
+                  <button className="button secondary" disabled={busy || !consent || groups.length >= me.limits.groups} onClick={() => void createActivation()}>{busy ? "Generating…" : "Generate activation code"}</button>
                   {activation && <div className="activation-result">
                     <div className="section-label">TEMPORARY GROUP ADMIN COMMAND</div>
                     <div className="activation-code"><code>/wbot connect {activation.code}</code><button onClick={() => void copyText("/wbot connect " + activation.code)}>Copy</button></div>
@@ -277,9 +314,24 @@ function App() {
 
           {view === "settings" && <>
             <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Workspace settings</h1><p className="muted">Your account and shared bot configuration.</p></div></div>
-            <section className="panel details"><div className="detail"><span>Workspace</span><strong>{me.workspace.name}</strong></div><div className="detail"><span>Role</span><strong>{me.workspace.role}</strong></div><div className="detail"><span>Email</span><strong>{me.user.email}</strong></div><div className="detail"><span>Registered groups</span><strong>{groups.length} / {me.limits.groups}</strong></div><div className="detail"><span>Monthly message allowance</span><strong>{me.limits.messagesPerMonth}</strong></div><div className="detail"><span>Bot connection model</span><strong>Shared W-Bot number</strong></div></section>
+            <AccountSettings me={me} onRefresh={refresh} onLogout={logout}/>
+          </>}
+          {view === "activity" && <>
+            <div className="page-heading"><div><div className="eyebrow">ACTIVITY & LIMITS</div><h1>Activity & subscription</h1><p className="muted">Group activation history, security changes and shared bot connectivity.</p></div></div>
+            <WorkspaceActivity/>
           </>}
         </main>
+        {pendingHistoryDelete && <div className="modal-backdrop" role="presentation">
+          <div className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="history-title" aria-describedby="history-description">
+            <div className="eyebrow">DATA PRIVACY</div>
+            <h2 id="history-title">Permanently erase message history?</h2>
+            <p id="history-description" className="muted">Delete stored W-Bot translation messages for <strong>{pendingHistoryDelete.name}</strong> since this workspace activated it. This cannot be undone and does not delete messages already sent in WhatsApp.</p>
+            <div className="modal-actions">
+              <button className="button secondary" disabled={busy} onClick={() => setPendingHistoryDelete(null)}>Cancel</button>
+              <button className="button danger-button" disabled={busy} onClick={() => void deleteGroupHistory(pendingHistoryDelete)}>{busy ? "Deleting…" : "Erase stored history"}</button>
+            </div>
+          </div>
+        </div>}
         {pendingDisconnect && <div className="modal-backdrop" role="presentation">
           <div className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="disconnect-title" aria-describedby="disconnect-description">
             <div className="eyebrow">DISCONNECT GROUP</div>

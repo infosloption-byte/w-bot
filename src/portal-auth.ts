@@ -94,6 +94,19 @@ export async function requirePortalAuth(
 }
 
 export function requireMutationHeader(request: FastifyRequest, reply: FastifyReply): boolean {
+  // Deny browser requests originating from any host other than the portal.
+  // Nginx forwards the original Host header to the API; this also works for
+  // the localhost-only SSH tunnel. Do not trust X-Forwarded-Host here.
+  const origin = request.headers.origin;
+  if (origin) {
+    let host: string;
+    try { host = new URL(origin).host; }
+    catch { reply.code(403).send({ error: "Invalid request origin" }); return false; }
+    if (host !== request.headers.host) {
+      reply.code(403).send({ error: "Cross-origin request rejected" });
+      return false;
+    }
+  }
   if (request.headers["x-wbot-request"] !== "1") {
     reply.code(403).send({ error: "Request header required" });
     return false;
