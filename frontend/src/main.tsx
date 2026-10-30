@@ -265,7 +265,7 @@ function App() {
                   {activation && <div className="activation-result">
                     <div className="section-label">TEMPORARY GROUP ADMIN COMMAND</div>
                     <div className="activation-code"><code>/wbot connect {activation.code}</code><button onClick={() => void copyText("/wbot connect " + activation.code)}>Copy</button></div>
-                    <small>Expires {new Date(activation.expiresAt).toLocaleTimeString()}. Keep it private until the group admin posts it.</small>
+                    <small>Expires {new Date(activation.expiresAt).toLocaleTimeString()}. A group admin may send this full command or just the 16-character code in the WhatsApp group. Do not share the code outside the group.</small>
                   </div>}
                 </div></div>
                 <div className="step"><span className="step-number">03</span><div><h3>Verify ownership inside WhatsApp</h3><p>A verified group admin posts the activation command in the WhatsApp group. W-Bot verifies their role and connects the group to your workspace.</p><p className="hint">Activation codes only work in groups where the shared W-Bot account is a participant.</p></div></div>

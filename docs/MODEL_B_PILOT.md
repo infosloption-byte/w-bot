@@ -7,7 +7,7 @@
 
 1. A customer signs up in the W-Bot portal using an invitation code, email and password. The system creates an isolated workspace.
 2. The customer selects Add Group and generates a 16-character, one-time group activation code. The code expires after 15 minutes and is stored as a SHA-256 digest, not as plaintext.
-3. A WhatsApp **group administrator** adds the shared W-Bot number to their group, then posts /wbot connect CODE in that group.
+3. A WhatsApp **group administrator** adds the shared W-Bot number to their group, then sends `/wbot connect CODE` or just the exact 16-character code in that group. Both routes require the same administrator verification and one-time code.
 4. The Web gateway checks live WhatsApp group metadata. Only a matching admin or superadmin JID, including LID identifiers when supplied by Baileys, can activate the group.
 5. The backend validates the one-time code and binds the group to precisely one tenant. A group already assigned to a different customer cannot be claimed.
 6. The customer manages five-language settings, group status and usage through the dashboard. Replies still quote original messages.
@@ -98,3 +98,7 @@ Then recreate **only** the Web gateway (do not reset the Baileys auth volume):
 Generate a new code in the portal and send it from a **verified WhatsApp group admin** to the new group. The gateway prints `W-Bot incoming group event` with only the Baileys event type and a filter reason, **no group IDs, sender JIDs, message content or activation codes**. If the filter is `accepted`, look for `Group activation command received`. If the filter is `from_bot_account`, the command originated from the linked W-Bot account and cannot be accepted. `not_live_notify`, `missing_sender_id` or `non_text_or_unsupported_wrapper` indicate why the current safe message parser didn't handle the event. If no group event appears, WhatsApp did not deliver a compatible new event to this linked device.
 
 Once diagnosed, set `WEB_ACTIVATION_DEBUG=false` and recreate only the Web gateway. Never paste secrets, codes or QR pairing logs into support messages.
+
+### Activation code recognition
+
+A new `WEB_ACTIVATION_DEBUG=true` diagnostic classifies valid incoming messages as `command`, `code_only`, `invalid_command` or `other`, without printing the code or the message. The sender must still be verified against current group admin metadata before the API can consume the hashed, expiring code. Always generate a fresh code after deploying the gateway change; older WhatsApp messages will not be replayed.

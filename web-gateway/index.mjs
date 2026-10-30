@@ -3,7 +3,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand, diagnoseIncomingGroupMessage } from "./validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand, diagnoseIncomingGroupMessage, classifyActivationText } from "./validation.mjs";
 
 process.umask(0o077);
 const token = process.env.WEB_GATEWAY_TOKEN || "";
@@ -222,9 +222,12 @@ async function connect() {
     for (const message of messages) {
       if (activationDebug && isGroupJid(message?.key?.remoteJid)) {
         // Never log group IDs, participant IDs, message text or activation codes.
+        const reason = diagnoseIncomingGroupMessage(message, type);
         console.info("W-Bot incoming group event", {
-          type,
-          filter: diagnoseIncomingGroupMessage(message, type)
+          type, filter: reason,
+          activationInput: reason === "accepted"
+            ? classifyActivationText(extractLiveMessage(message, type)?.text)
+            : "not_inspected"
         });
       }
       const incoming = extractLiveMessage(message, type);
@@ -233,7 +236,7 @@ async function connect() {
       if (command) {
         console.info("Group activation command received");
         void activateCustomerGroup(ws, message, incoming, command);
-      } else if (/^\/wbot\s+connect\b/i.test(incoming.text.trim())) {
+      } else if (classifyActivationText(incoming.text) === "invalid_command") {
         console.warn("Group activation command ignored: invalid syntax or code length");
       } else {
         void ingress(incoming);

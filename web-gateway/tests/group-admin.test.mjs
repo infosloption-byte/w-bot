@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand } from "../validation.mjs";
+import { isVerifiedGroupAdmin, senderJidCandidates, parseActivationCommand, classifyActivationText } from "../validation.mjs";
 
 test("only a current WhatsApp admin can activate a group", () => {
   const participants = [
@@ -53,4 +53,12 @@ test("activation command parser accepts valid codes and rejects malformed comman
   assert.equal(parseActivationCommand("/wbot connect 1234567890ABCDEF more"), null);
   assert.equal(parseActivationCommand("/wbot connect 1234567890ABCDEF"), "1234567890ABCDEF");
   assert.equal(parseActivationCommand(null), null);
+  assert.equal(parseActivationCommand(" ABCDEF1234567890 "), "ABCDEF1234567890");
+  assert.equal(parseActivationCommand("abcdefghijklmno0"), null);
+  assert.equal(parseActivationCommand("CODE ABCDEF1234567890"), null);
+  assert.equal(parseActivationCommand("wbot connect ABCDEF1234567890"), null);
+  assert.equal(classifyActivationText("/wbot connect ABCDEF1234567890"), "command");
+  assert.equal(classifyActivationText("ABCDEF1234567890"), "code_only");
+  assert.equal(classifyActivationText("/wbot connect invalid"), "invalid_command");
+  assert.equal(classifyActivationText("Hello everyone"), "other");
 });

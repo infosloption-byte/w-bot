@@ -91,8 +91,19 @@ export function isVerifiedGroupAdmin(participants, senderJids) {
   });
 }
 
+export function classifyActivationText(text) {
+  if (typeof text !== "string") return "other";
+  const trimmed = text.trim();
+  if (/^\/wbot\s+connect\s+[A-Fa-f0-9]{16}$/i.test(trimmed)) return "command";
+  // A pilot admin can paste the one-time code directly into the WhatsApp group.
+  if (/^[A-Fa-f0-9]{16}$/.test(trimmed)) return "code_only";
+  if (/^\/?wbot\s+connect\b/i.test(trimmed)) return "invalid_command";
+  return "other";
+}
+
 export function parseActivationCommand(text) {
-  if (typeof text !== "string") return null;
-  const match = /^\/wbot\s+connect\s+([A-Fa-f0-9]{16})\s*$/i.exec(text.trim());
-  return match ? match[1].toUpperCase() : null;
+  const kind = classifyActivationText(text);
+  if (kind === "code_only") return text.trim().toUpperCase();
+  if (kind !== "command") return null;
+  return text.trim().split(/\s+/).at(-1).toUpperCase();
 }
