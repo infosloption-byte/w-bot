@@ -131,3 +131,37 @@ test("customer-owned connection policy defaults to disabled in a fresh database"
   assert.equal(response.json().connections.length,0);
   await app.close();
 });
+
+test("valid gateway token still cannot claim a connection for a different tenant", async () => {
+  let created = false;
+  const db = {
+    customerWhatsAppConnection: { findUnique: async () => ({
+      id: "cktb92lxp000007n3qux1329d",tenantId:"tenant-a",active:true,
+      status:"CONNECTED",kind:"BUSINESS"
+    }) },
+    whatsAppConnectionPolicy: { findUnique: async () => ({
+      customerNumbersEnabled:true,businessEnabled:true,personalEnabled:true
+    }) },
+    languageCatalog: { findMany: async () => [
+      { code:"en",name:"English" }
+    ] },
+    $transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb({
+      groupActivation: { findUnique: async () => ({
+        id:"claim-b",connectionId:"cktb92lxp000007n3qux1329d",
+        tenantId:"tenant-b",consumedAt:null,expiresAt:new Date(Date.now()+30000)
+      }) },
+      group: { create: async () => { created = true; } }
+    })
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  const response=await app.inject({
+    method:"POST",url:"/internal/byon/activate",
+    headers:{authorization:"Bearer "+"e".repeat(64)},
+    payload:{connectionId:"cktb92lxp000007n3qux1329d",
+      groupId:"12345678901@g.us",groupName:"Foreign Group",
+      code:"ABCDEF1234567890",adminVerified:true}
+  });
+  assert.equal(response.statusCode,403);
+  assert.equal(created,false);
+  await app.close();
+});
