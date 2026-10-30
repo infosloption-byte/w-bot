@@ -59,3 +59,9 @@ Check:
 ## Limitations
 
 The responsive contract tests check source/structure; the image build and live mobile/tablet rendering must still be verified on the Lightsail server and representative browsers/devices. This change does not authorize commercial usage of the unofficial WhatsApp Web connector.
+
+## Fixed sign-out visibility on short screens
+
+The Platform Admin menu has more items than the customer workspace, so on shorter laptop displays the account footer could be pushed below the viewport. Both portals now reserve sidebar space for the account/footer and keep the sign-out control visible. Only the menu list scrolls when there isn't enough vertical space. The same approach is used for mobile and tablet drawers.
+
+A fifth build-time UI contract test verifies the sidebar footer and scrolling rules. Check expanded and icon-only modes at viewport heights 500px, 600px and 768px, including platform menus with eight or more items. Confirm Sign out is visible while scrolling the navigation list. The test is source-level; browser confirmation is still required.
