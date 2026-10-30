@@ -62,3 +62,21 @@ test("all platform data tables provide labels for mobile card layout", () => {
   ]) assert.ok(platform.includes('data-label="' + label + '"'), label);
   assert.equal((platform.match(/data-label="/g) ?? []).length, 26);
 });
+
+test("short viewports keep Sign out in a fixed footer while navigation scrolls", () => {
+  for (const source of [customer, platform]) {
+    assert.match(source, /className="sidebar-foot"/);
+    assert.match(source, /className="nav-item signout"/);
+  }
+  for (const rule of [
+    ".dashboard .sidebar nav,",
+    "flex:1 1 auto;",
+    "min-height:0;",
+    "overflow-y:auto;",
+    "grid-auto-rows:max-content;",
+    ".dashboard .sidebar-foot,",
+    "flex:0 0 auto;",
+    ".dashboard .sidebar-foot .signout",
+    "max-height:760px"
+  ]) assert.ok(responsive.includes(rule), rule);
+});
