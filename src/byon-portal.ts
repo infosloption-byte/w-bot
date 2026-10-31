@@ -113,14 +113,16 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       const res = await byonRequest(cfg, "/connections/" + c.id + "/status");
       if (res.ok) {
         const state = await res.json() as {
-          status?: string; pairingCode?: string; qrDataUrl?: string; phoneLast4?: string
+          status?: string; pairingCode?: string; qrDataUrl?: string;
+          phoneLast4?: string; pairExpiresAt?: number | null
         };
         return { connection: { ...c, status: state.status ?? c.status,
           phoneLast4: state.phoneLast4 ?? c.phoneLast4 },
-          pairingCode: state.pairingCode ?? null, qrDataUrl: state.qrDataUrl ?? null };
+          pairingCode: state.pairingCode ?? null, qrDataUrl: state.qrDataUrl ?? null,
+          pairExpiresAt: typeof state.pairExpiresAt === "number" ? state.pairExpiresAt : null };
       }
     } catch { /* fail closed */ }
-    return { connection: c, pairingCode: null, qrDataUrl: null };
+    return { connection: c, pairingCode: null, qrDataUrl: null, pairExpiresAt: null };
   });
 
   app.get<{ Params: { id: string } }>("/portal/api/connections/:id/groups", async (req, reply) => {

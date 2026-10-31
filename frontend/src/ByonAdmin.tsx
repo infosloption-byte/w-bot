@@ -55,7 +55,7 @@ export function ByonAdmin({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Save failed"); }
     finally { setBusy(false); }
   }
-  return <div className="two-column">
+  return <div className="two-column byon-admin-layout">
     {error && <div className="alert error" role="alert">{error}</div>}
     {notice && <div className="alert success" role="status">{notice}</div>}
     <section className="panel">

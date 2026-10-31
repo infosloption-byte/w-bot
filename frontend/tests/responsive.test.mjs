@@ -80,3 +80,32 @@ test("short viewports keep Sign out in a fixed footer while navigation scrolls",
     "max-height:760px"
   ]) assert.ok(responsive.includes(rule), rule);
 });
+
+const connections = fromRoot("src/ByonConnections.tsx");
+const connectionCss = fromRoot("src/connections.css");
+
+test("activated personal and business groups refresh automatically and identify their linked number", () => {
+  for (const term of [
+    "const refreshGroups = useCallback",
+    'view !== "groups" && view !== "overview"',
+    "window.setInterval",
+    'api<{ groups: Group[] }>("/groups")',
+    "manualGroupRefresh",
+    "group.connection.kind",
+    "group.connection.label",
+    "onManageGroups"
+  ]) assert.ok(customer.includes(term), term);
+});
+test("responsive pairing provides distinct QR and phone-code workflows", () => {
+  for (const term of [
+    '"qr" | "code"', "Generate QR code", "Request pairing code",
+    "pairExpiresAt", "byon-progress", "byon-method-switch",
+    "byon-qr-frame", "byon-code-stage", "byon-connected",
+    "byon-group-list", "onManageGroups"
+  ]) assert.ok(connections.includes(term), term);
+  for (const term of [
+    "max-width:1100px", "max-width:700px", "max-width:480px",
+    ".byon-layout", ".byon-qr-stage", ".byon-method-switch",
+    ".byon-number-item", ".group-page-actions"
+  ]) assert.ok(connectionCss.includes(term), term);
+});

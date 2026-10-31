@@ -187,7 +187,9 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
       where: { tenantId: user.tenantId },
       select: {
         id: true, name: true, whatsappGroupId: true, enabled: true,
-        gateway: true, targetLanguages: true, claimedAt: true, createdAt: true
+        gateway: true, targetLanguages: true, claimedAt: true, createdAt: true,
+        connectionId: true,
+        connection: { select: { label: true, kind: true, phoneLast4: true } }
       },
       orderBy: { createdAt: "desc" }
     });

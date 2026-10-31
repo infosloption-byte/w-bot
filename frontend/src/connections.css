@@ -1,16 +1,101 @@
+/* W-Bot connection onboarding: same dark teal theme, optimized for touch. */
+.byon-shell{min-width:0;display:grid;gap:18px}
+.byon-shell .panel{min-width:0;overflow:hidden}
+.byon-shell .eyebrow{margin-bottom:7px}
+.byon-shell h3{font-size:18px;margin:0 0 6px}
+.byon-shell .muted{line-height:1.55}
+.byon-notice{padding:14px 16px;border:1px solid #496052;background:#1c2a30;border-radius:12px;font-size:13px;line-height:1.6}
+.byon-notice span{color:#f5c56b;margin-right:9px}
+.byon-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.byon-progress-step{display:flex;align-items:center;gap:10px;padding:12px 15px;border-radius:12px;background:#101d2c;border:1px solid #254050;color:#8da4b4;font-size:12px;font-weight:700;min-width:0}
+.byon-progress-step.is-complete{color:#72efd7;border-color:#27695e;background:#11302d}
+.byon-progress-number{display:grid;place-items:center;width:27px;height:27px;flex:none;border-radius:50%;border:1px solid #456779;color:#9eb9c9}
+.byon-progress-step.is-complete .byon-progress-number{color:#082018;background:#54d9c0;border-color:#54d9c0}
+.byon-layout{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.1fr);gap:18px;align-items:start}
+.byon-layout>.panel{padding:24px;border-radius:17px}
+.byon-panel-heading{display:flex;gap:12px;align-items:start;justify-content:space-between;margin-bottom:15px}
+.byon-panel-heading>div{min-width:0}
+.byon-count{flex:none;background:#19313c;padding:7px 10px;border-radius:9px;font-weight:700;color:#80dfd3;font-size:11px}
+.byon-number-list{display:grid;gap:9px;margin:18px 0}
+.byon-number-item{display:flex;align-items:center;text-align:left;width:100%;min-width:0;gap:11px;border:1px solid #2b4655;border-radius:12px;padding:13px;background:#101f2e;color:#e7f0f3;transition:border-color .18s,background .18s}
+.byon-number-item:hover,.byon-number-item:focus-visible{border-color:#5bdcc9}
+.byon-number-item.is-active{border-color:#39cfb9;background:#133530;box-shadow:0 0 0 1px #1f7366 inset}
+.byon-number-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:11px;background:#204349;color:#57ddc8;font-size:19px}
+.byon-number-info{display:grid;gap:5px;min-width:0;flex:1}
+.byon-number-info strong{font-size:13px;overflow-wrap:anywhere}
+.byon-number-info small{font-size:11px;color:#92b3bd;overflow-wrap:anywhere}
+.byon-state{flex:none;display:inline-flex;align-items:center;gap:6px;border-radius:50px;padding:6px 9px;border:1px solid #536373;color:#b4c5d1;font-size:10px;font-weight:750;white-space:nowrap}
+.byon-state::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:#9eafbd}
+.byon-state.is-online{color:#78eed0;border-color:#267f67;background:#133c32}
+.byon-state.is-online::before{background:#42e0af;box-shadow:0 0 0 3px #33c4a221}
+.byon-add-button{width:100%;min-height:46px}
+.byon-create-form{margin-top:17px;border-top:1px solid #293c4e;padding-top:19px;display:grid;gap:14px}
+.byon-kind-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.byon-kind{display:grid;gap:7px;text-align:left;padding:13px 11px;border-radius:11px;background:#101e2e;border:1px solid #2d4b60;color:#dceaf0}
+.byon-kind strong{font-size:12px;line-height:1.3}.byon-kind small{color:#99abb8;font-size:11px;line-height:1.35}
+.byon-kind.is-selected{background:#183b36;border-color:#39ddc1}
+.byon-kind:disabled{opacity:.4}
+.byon-field{display:grid;gap:8px;font-size:12px;color:#bed2de;font-weight:700}
+.byon-field input{width:100%;min-width:0;min-height:46px;padding:11px 13px;border-radius:10px;border:1px solid #365468;background:#0c1928;color:#ecf5f7;font-size:16px}
+.byon-field small{font-size:11px;line-height:1.4;font-weight:400;color:#8ca9b8}
+.byon-check{display:flex;gap:11px;align-items:flex-start;font-weight:400;font-size:12px;line-height:1.5;color:#a8bdc7}
+.byon-check input{appearance:auto;flex:none;width:18px;height:18px;accent-color:#3ce1c0;margin:1px 0 0}
+.byon-empty{display:grid;place-items:center;text-align:center;gap:9px;padding:24px 13px;border-radius:12px;border:1px dashed #355467;background:#101e2b}
+.byon-empty-icon{width:50px;height:50px;display:grid;place-items:center;border-radius:15px;color:#51dbc7;background:#17373c;font-size:23px}
+.byon-empty strong{font-size:14px}.byon-empty p{color:#92aabb;font-size:12px;margin:0;max-width:300px}
+.byon-setup-empty{min-height:240px}
+.byon-current{display:flex;gap:12px;align-items:center;border-radius:12px;padding:12px 14px;background:#102735;border:1px solid #264b59;margin:13px 0 18px}
+.byon-current-icon{display:grid;place-items:center;flex:none;width:34px;height:34px;border-radius:10px;background:#1f5555;color:#5de5c4}
+.byon-current>div{display:grid;gap:3px;min-width:0}.byon-current strong{font-size:13px;overflow-wrap:anywhere}
+.byon-current small{color:#a1bcc9;font-size:11px}
+.byon-method-switch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;background:#0e1e2b;border:1px solid #27495a;border-radius:11px;padding:5px;margin:15px 0}
+.byon-method-switch button{border:0;min-height:43px;border-radius:8px;color:#9fb7c3;background:transparent;font-size:12px;font-weight:700}
+.byon-method-switch button.is-selected{color:#08241f;background:#4cdec6;box-shadow:0 3px 12px #0004}
+.byon-qr-stage{display:grid;justify-items:center;align-content:center;gap:10px;min-height:286px;margin:16px 0 13px;border:1px solid #284b54;border-radius:15px;background:radial-gradient(circle at center,#173f3b 0%,#0d1b2a 75%);padding:18px}
+.byon-qr-frame{display:grid;place-items:center;background:#fff;padding:12px;border-radius:14px;box-shadow:0 12px 35px #0007}
+.byon-qr-frame img{width:min(250px,100%);height:auto;display:block}
+.byon-code-stage{text-align:center;display:grid;justify-items:center;gap:13px;padding:22px 8px}
+.byon-code-stage>strong{color:#ebfff8;font-size:clamp(22px,4vw,30px);letter-spacing:.15em;overflow-wrap:anywhere}
+.byon-placeholder{display:grid;justify-items:center;gap:10px;text-align:center}
+.byon-placeholder>span{font-size:49px;color:#52dbc2}
+.byon-placeholder strong{font-size:14px;color:#cbe6e5}
+.byon-placeholder small{color:#90b2be;font-size:12px}
+.byon-expiry{color:#9cbdc8;margin:0;font-size:11px}
+.byon-main-button{width:100%;min-height:46px}
+.byon-instructions{border-radius:12px;background:#101e2d;border:1px solid #294353;padding:17px;margin-top:16px}
+.byon-instructions h4{font-size:13px;margin:0 0 12px;color:#e4f0f3}
+.byon-instructions ol{padding-left:20px;margin:0;display:grid;gap:10px;color:#a7c1c9;font-size:12px;line-height:1.5}
+.byon-connected{display:flex;align-items:flex-start;gap:12px;border:1px solid #218367;border-radius:12px;background:#10382f;padding:15px;margin:14px 0 20px}
+.byon-connected>span{flex:none;display:grid;place-items:center;width:29px;height:29px;border-radius:50%;color:#0d2920;background:#54e1b2}
+.byon-connected strong{display:block;margin-bottom:4px}.byon-connected p{margin:0;color:#b1d9cd;font-size:12px}
+.byon-next{border-top:1px solid #31515b;padding-top:18px;display:grid;gap:13px}
+.byon-next h3{margin:0}.byon-next>p{margin:0}
+.byon-group-list{display:grid;gap:6px;max-height:190px;overflow-y:auto;margin:0}
+.byon-group-item{display:flex;gap:10px;align-items:center;border:1px solid #2d4953;padding:10px;border-radius:9px;font-size:12px;overflow-wrap:anywhere}
+.byon-group-item span:first-child{color:#4ae1c7}
+.byon-activation{border:1px solid #3aa896;border-radius:12px;padding:15px;background:#132e30;min-width:0;display:grid;gap:11px}
+.byon-activation-command{display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap}
+.byon-activation-command code{color:#e7fff9;font-size:13px;overflow-wrap:anywhere;min-width:0;flex:1}
+.byon-activation p{font-size:12px;color:#b8ccd1;margin:0}
+.byon-manage-link{justify-self:start;min-height:44px}
+.byon-footer-actions{margin-top:25px;border-top:1px solid #294452;padding-top:17px}
+.byon-footer-actions .text-button{min-height:44px}
+.byon-shell button:focus-visible,.byon-shell input:focus-visible{outline:2px solid #65e1c8;outline-offset:2px}
+.group-page-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.group-page-actions .button{white-space:nowrap}
+@media(max-width:1100px){.byon-layout{grid-template-columns:minmax(0,1fr)}.byon-numbers-panel .byon-number-list{grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}}
+@media(max-width:700px){.byon-progress-step{font-size:11px;padding:10px;gap:7px}.byon-progress-number{width:24px;height:24px}.byon-layout>.panel{padding:19px}.byon-progress{gap:5px}}
+@media(max-width:480px){.byon-progress-step{display:grid;justify-items:center;text-align:center;align-content:center;gap:6px;padding:10px 5px;min-height:75px}.byon-layout{gap:14px}.byon-kind-picker{grid-template-columns:minmax(0,1fr)}.byon-number-item{flex-wrap:wrap}.byon-state{margin-left:auto}.byon-panel-heading{flex-wrap:wrap}.byon-qr-stage{padding:12px;min-height:265px}.byon-instructions{padding:14px}.byon-activation-command{display:grid;grid-template-columns:1fr}.group-page-actions{width:100%}.group-page-actions .button{flex:1;white-space:normal}.byon-code-stage>strong{letter-spacing:.08em}}
+@media(prefers-reduced-motion:reduce){.byon-number-item{transition:none}}
 
-.connection-workspace .panel{min-width:0}
-.connection-workspace .panel .form{margin-top:22px;display:grid;gap:14px}
-.connection-workspace .panel input:not([type="checkbox"]){width:100%;min-width:0;background:#0b1826;color:#e9f3f6;padding:13px;border:1px solid #2f5362;border-radius:10px;font-size:16px}
-.connection-choice{display:flex;flex-direction:column;text-align:left;width:100%;gap:5px;background:#112333;border:1px solid #31505d;border-radius:12px;padding:14px;margin:10px 0;color:#c9e0e9}
-.connection-choice.active{background:#164039;border-color:#39dec0}
-.connection-choice span{font-size:12px;color:#9db5c5}
-.connection-workspace .consent-row{font-size:12px;line-height:1.45}
-.connection-qr{display:flex;justify-content:center;margin:18px 0;padding:10px;border-radius:12px;background:white;width:max-content;max-width:100%}
-.connection-qr img{max-width:100%;height:auto}
-.connection-pair-code{padding:14px;border:1px solid #307f70;background:#18332d;border-radius:12px;margin:12px 0;display:grid;gap:8px}
-.connection-pair-code span{font-size:12px}.connection-pair-code strong{font-size:22px;letter-spacing:.12em}
-.connection-activation{border:1px solid #3cc2ad;padding:14px;border-radius:12px;margin:12px 0;max-width:100%;overflow-wrap:anywhere}
-.connection-activation code{font-size:13px;overflow-wrap:anywhere}
-.connection-group-list{max-height:160px;overflow-y:auto;margin:12px 0}.connection-group-list>div{padding:8px;border-bottom:1px solid #254451}
-.connection-workspace .danger-action{margin-top:24px}
+/* Platform Admin policies and status tables also stack cleanly on tablets. */
+.byon-admin-layout{min-width:0;align-items:start}
+.byon-admin-layout>.panel{min-width:0}
+.byon-admin-layout .form{display:grid;gap:15px}
+.byon-admin-layout .consent-row{display:flex;gap:12px;align-items:flex-start;line-height:1.5;min-height:44px}
+.byon-admin-layout .consent-row input{flex:none;width:18px;height:18px;accent-color:#48dec4}
+.byon-admin-layout input[type="number"]{width:100%;max-width:220px;padding:11px 13px;border-radius:10px;background:#101f2d;border:1px solid #39556a;color:#ebf7f9;font-size:16px}
+.byon-admin-layout .platform-table-scroll{max-width:100%;overflow-x:auto}
+.byon-admin-layout .platform-table small{display:block;overflow-wrap:anywhere;color:#9fb8c5;font-size:11px}
+@media(max-width:1100px){.byon-admin-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:700px){.byon-admin-layout .panel{padding:17px}.byon-admin-layout .platform-table td{grid-template-columns:minmax(75px,32%) minmax(0,1fr)}.byon-admin-layout .form>.button{width:100%}}

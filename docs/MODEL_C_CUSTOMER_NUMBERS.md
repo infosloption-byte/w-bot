@@ -78,3 +78,15 @@ Inbound events enter a separate bearer-authenticated private API and are checked
 ## Limitations
 
 Personal accounts may expose broader conversations to the linked client even if W-Bot only chooses configured group messages. **Use a dedicated account wherever possible** and disclose this access to participants. Baileys is unofficial; linking may lead to instability, restrictions or loss of access. Group automation through Meta's official platform is a separate integration with different eligibility and functionality. This pilot has a per-process socket manager rather than distributed orchestration, and no guarantee of exactly-once inbound delivery. Commercial use requires consent, retention, monitoring, recovery, queue scaling and independent security review.
+
+## Customer-owned account translation and responsive onboarding fixes (2026-10-31)
+
+A successful Model C user pilot revealed three UX/behavior gaps, now addressed in the feature branch:
+
+1. **Messages sent by the linked account:** BYON must not blindly ignore \`fromMe=true\` because the customer's WhatsApp account is also used by a human. New live \`notify\` text messages posted by that account to authorized groups now enter the tenant-scoped translation pipeline. Message history, DMs, old "append" events, bot-generated "🌐" translation replies, known activation responses, and cached outbound bot message IDs remain excluded to prevent loops. No change to the shared Model B gateway, which still excludes its own messages.
+2. **My Groups:** Customer Portal loads groups again when opening Overview or My Groups and refreshes automatically while the page is visible (15-second cadence). A manual Refresh groups button is provided. Each group displays whether it uses Shared W-Bot, a Personal number, or a Business number, with connection label and masked phone suffix. BYON group activation already persists tenant membership; its historical omission from the UI was stale frontend state.
+3. **Pairing usability:** WhatsApp Numbers now provides a three-step flow; separate QR and phone-number code tabs; code/QR expiry guidance; account cards and connection statuses; group discovery and activation copy action; and a shortcut to My Groups. CSS has mobile, tablet and desktop breakpoints, plus improved Platform Admin control/table responsiveness.
+
+**Rollout note:** Update all three images \`api\`, \`byon-gateway\` and \`portal\` and deploy with unchanged environment variables and DB volumes. This is a code-only update: no new Prisma migration. The connected account's Baileys auth directory must be preserved; do not remove or reset \`wbot_byon_auth\`. Validate on a test account: another member's message translates, owner's ordinary group message translates once, W-Bot does not translate its own generated reply, a newly activated group appears on My Groups within 15 seconds and on manual refresh, QR/code switching works, and 375px/768px/1024px layouts do not horizontally overflow.
+
+**Build gate:** Gateway routing and web contract tests were added, but Docker builds and actual WhatsApp verification still need to pass on Lightsail before considering PR merge.

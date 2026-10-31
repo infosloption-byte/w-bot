@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { mkdir, rm } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
+import { extractByonLiveMessage } from "./message-routing.mjs";
 import { isGroupJid, extractLiveMessage, buildQuotedMessage, isVerifiedGroupAdmin,
   senderJidCandidates, parseActivationCommand } from "./validation.mjs";
 
@@ -23,6 +24,20 @@ const idValid = id => typeof id === "string" && /^c[a-z0-9]{18,35}$/.test(id);
 const phoneValid = number => typeof number === "string" && /^[1-9][0-9]{7,14}$/.test(number);
 const sessions = new Map();
 const wait = duration => new Promise(resolve => setTimeout(resolve, duration));
+function rememberBotMessage(entry, message) {
+  const id = message?.key?.id;
+  if (typeof id !== "string" || !id) return;
+  entry.recentOutboundIds.add(id);
+  const timer = setTimeout(() => entry.recentOutboundIds.delete(id), 5 * 60_000);
+  timer.unref();
+}
+function isSelfQuote(sender, ws) {
+  const normalize = value => typeof value === "string" ?
+    value.replace(/:[0-9]+(?=@)/, "") : "";
+  const target = normalize(sender);
+  return Boolean(target && [ws.user?.id, ws.user?.lid].some(jid => normalize(jid) === target));
+}
+
 
 function auth(req) {
   const value = req.headers.authorization?.startsWith("Bearer ") ?
@@ -106,10 +121,11 @@ async function activation(entry, msg, incoming, code) {
       code, adminVerified: true
     });
     try {
-      await entry.socket.sendMessage(incoming.groupId, {
+      const sent = await entry.socket.sendMessage(incoming.groupId, {
         text: accepted ? "✅ W-Bot translation activated for this group." :
           "⚠️ Activation could not be completed. Check the code and account settings."
       }, { quoted: msg });
+      rememberBotMessage(entry, sent);
     } catch { /* reply is optional */ }
   } catch { console.warn("BYON activation metadata check failed"); }
 }
@@ -123,6 +139,24 @@ async function connect(id, phoneNumber) {
       try { existing.socket?.end?.(new Error("Expired pairing session")); } catch { /* noop */ }
       sessions.delete(id);
     } else {
+      // Customers can change from QR to pairing-code mode without resetting
+      // a still-valid linked-device session. Never log the phone or code.
+      if (phoneNumber && !existing.connected && !existing.pairingRequested) {
+        existing.pairingRequested = true;
+        existing.phoneNumber = phoneNumber;
+        if (existing.socket && existing.qrUntil > Date.now()) {
+          try {
+            const code = await existing.socket.requestPairingCode(phoneNumber);
+            if (!existing.stopped) {
+              existing.pairingCode = code;
+              existing.qrUntil = Date.now() + 60000;
+            }
+          } catch {
+            existing.pairingRequested = false;
+            throw Error("Pairing code unavailable; retry later");
+          }
+        }
+      }
       return existing;
     }
   }
@@ -134,7 +168,7 @@ async function connect(id, phoneNumber) {
     id, socket: null, connected: false, status: "PAIRING",
     pairingCode: null, qrDataUrl: null, qrUntil: 0,
     phoneLast4: null, stopped: false, retry: 0, retryTimer: null,
-    phoneNumber: phoneNumber || null, pairingRequested: false
+    phoneNumber: phoneNumber || null, pairingRequested: false, recentOutboundIds: new Set()
   };
   sessions.set(id, entry);
   function attach() {
@@ -197,26 +231,20 @@ async function connect(id, phoneNumber) {
       }
     });
     ws.ev.on("messages.upsert", ({ messages, type }) => {
-      if (entry.socket !== ws || entry.stopped || type !== "notify") return;
+      if (entry.socket !== ws || entry.stopped || !entry.connected) return;
       for (const msg of messages) {
-        // Never translate messages from the connected account itself.
-        const incoming = extractLiveMessage(msg, type);
-        if (incoming) {
-          const code = parseActivationCommand(incoming.text);
-          if (code) void activation(entry, msg, incoming, code);
-          else void post("/internal/byon/message", { connectionId: id, ...incoming });
-        } else if (msg?.key?.fromMe && isGroupJid(msg.key.remoteJid)) {
-          // An activation command from the customer's other linked device is
-          // accepted ONLY if current WhatsApp group-admin metadata verifies it.
-          const text = msg.message?.conversation ??
-            msg.message?.extendedTextMessage?.text ?? "";
-          const code = parseActivationCommand(text);
-          if (code && typeof msg.key.id === "string") {
-            void activation(entry, msg, {
-              groupId: msg.key.remoteJid, messageId: msg.key.id,
-              senderId: ws.user?.id ?? "", text
-            }, code);
-          }
+        // Unlike the shared bot, a customer-owned account is also a human user.
+        // Accept its live group messages but reject W-Bot replies and outbound IDs.
+        // Ignore append/history events to avoid replaying old messages on reconnect.
+        const incoming = extractByonLiveMessage(
+          msg, type, ws.user?.id ?? ws.user?.lid, entry.recentOutboundIds
+        );
+        if (!incoming) continue;
+        const code = parseActivationCommand(incoming.text);
+        if (code) {
+          void activation(entry, msg, incoming, code);
+        } else {
+          void post("/internal/byon/message", { connectionId: id, ...incoming });
         }
       }
     });
@@ -261,7 +289,8 @@ const server = createServer(async (req, res) => {
       return respond(res,200,{
         status:entry.status, phoneLast4:entry.phoneLast4,
         pairingCode:Date.now() < entry.qrUntil ? entry.pairingCode : null,
-        qrDataUrl:Date.now() < entry.qrUntil ? entry.qrDataUrl : null
+        qrDataUrl:Date.now() < entry.qrUntil ? entry.qrDataUrl : null,
+        pairExpiresAt:entry.qrUntil > Date.now() ? entry.qrUntil : null
       });
     if (!entry.connected || !entry.socket) return respond(res,503,{error:"Not connected"});
     if (req.method === "GET" && action === "groups") {
@@ -279,10 +308,16 @@ const server = createServer(async (req, res) => {
       await entry.socket.groupMetadata(input.groupId);
       const quoted = input.quoted === undefined ? undefined :
         buildQuotedMessage(input.groupId,input.quoted);
+      // An original message from the customer's own phone is fromMe=true even
+      // though the translation response is generated by this linked device.
+      if (quoted && isSelfQuote(quoted.key.participant, entry.socket)) {
+        quoted.key.fromMe = true;
+      }
       if (input.quoted !== undefined && !quoted)
         return respond(res,400,{error:"Invalid quote"});
       const result = await entry.socket.sendMessage(input.groupId,{ text:input.text },
         quoted ? { quoted } : undefined);
+      rememberBotMessage(entry, result);
       return result?.key?.id ?
         respond(res,200,{messageId:result.key.id}) :
         respond(res,502,{error:"Send unacknowledged"});
