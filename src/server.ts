@@ -354,7 +354,7 @@ app.patch<{ Params: { groupId: string } }>("/api/groups/:groupId", async (reques
 
 app.get("/api/messages", async (request) => {
   const q = z.object({ groupId: z.string().min(1).optional() }).parse(request.query);
-  const group = q.groupId ? await prisma.group.findUnique({ where: { whatsappGroupId: q.groupId } }) : null;
+  const group = q.groupId ? await prisma.group.findUnique({ where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: q.groupId } } }) : null;
   if (q.groupId && !group) return { messages: [] };
   const messages = await prisma.message.findMany({
     where: group ? { groupId: group.id } : undefined,
@@ -372,7 +372,7 @@ app.post("/api/simulate", async (request, reply) => {
   if (!cfg.dryRun) return reply.code(403).send({ error: "Simulation is only enabled in DRY_RUN mode" });
   const data = simulationSchema.parse(request.body);
   const accepted = await enqueue(data.groupId, data.messageId || randomUUID(), data.senderId, data.text,
-    (await prisma.group.findUnique({ where: { whatsappGroupId: data.groupId }, select: { gateway: true } }))?.gateway || "OFFICIAL");
+    (await prisma.group.findUnique({ where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: data.groupId } }, select: { gateway: true } }))?.gateway || "OFFICIAL");
   if (!accepted) return reply.code(409).send({ accepted: false, reason: "Unknown/disabled group or duplicate message ID" });
   return reply.code(202).send({ accepted: true, note: "Translation will be processed asynchronously; no WhatsApp message is sent." });
 });
