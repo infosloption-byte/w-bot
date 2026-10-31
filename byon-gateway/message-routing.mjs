@@ -15,7 +15,20 @@ export const isBotText = text =>
   text.startsWith("⚠️ Activation could not be completed.");
 
 export function extractByonLiveMessage(message, type, ownerJid, recentOutboundIds = new Set()) {
-  if (type !== "notify" || !isGroupJid(message?.key?.remoteJid)) return null;
+  if (!isGroupJid(message?.key?.remoteJid)) return null;
+  // Baileys may deliver human messages sent on the linked phone as
+  // type="append" rather than "notify". Only accept a very recent outgoing
+  // human message, never historical sync (which may replay entire chats).
+  if (type !== "notify") {
+    if (type !== "append" || message?.key?.fromMe !== true) return null;
+    const raw = message?.messageTimestamp;
+    const timestamp = typeof raw === "number" ? raw :
+      typeof raw === "bigint" ? Number(raw) :
+      raw && typeof raw.toNumber === "function" ? raw.toNumber() :
+      raw && typeof raw.low === "number" ? raw.low : NaN;
+    const age = Date.now() - timestamp * 1000;
+    if (!Number.isFinite(age) || age < -30000 || age > 120000) return null;
+  }
   const id = message.key?.id;
   if (typeof id !== "string" || !id || id.length > 191 || recentOutboundIds.has(id)) return null;
   if (message.key?.fromMe !== true) return extractLiveMessage(message, type);

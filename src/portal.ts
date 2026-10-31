@@ -164,7 +164,7 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
         emailVerified: Boolean(account?.emailVerifiedAt)
       },
       workspace: { id: user.tenantId, name: user.tenantName, role: user.role },
-      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth },
+      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth, whatsappConnections: limits.whatsappConnections },
       subscription: { plan: limits.plan, status: limits.status },
       botPhoneNumber: cfg.SAAS_BOT_NUMBER ?? null,
       note: "Invite-only technical pilot; a linked WhatsApp bot is unofficial."
@@ -303,7 +303,7 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     }) : [];
     return {
       groups: memberGroups.length, messages: counter?.messages ?? 0,
-      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth },
+      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth, whatsappConnections: limits.whatsappConnections },
       plan: { code: limits.plan, status: limits.status },
       recent
     };

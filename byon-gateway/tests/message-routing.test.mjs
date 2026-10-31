@@ -43,3 +43,16 @@ test("reject oversize or missing owner human messages",()=>{
   assert.equal(extractByonLiveMessage(make("x".repeat(1001)),"notify",own),null);
   assert.equal(extractByonLiveMessage(make("  "),"notify",own),null);
 });
+
+test("fresh append from linked phone is translatable without reprocessing history",()=>{
+  const live=make("Phone-side outgoing text",true,"OWN-APPEND-1");
+  live.messageTimestamp=Math.floor(Date.now()/1000);
+  assert.equal(extractByonLiveMessage(live,"append",own)?.text,"Phone-side outgoing text");
+  const stale=make("Old history",true,"OLD-APPEND");
+  stale.messageTimestamp=Math.floor(Date.now()/1000)-180;
+  assert.equal(extractByonLiveMessage(stale,"append",own),null);
+  assert.equal(extractByonLiveMessage(make("No timestamp",true),"append",own),null);
+  const other=make("Old incoming",false);
+  other.messageTimestamp=Math.floor(Date.now()/1000);
+  assert.equal(extractByonLiveMessage(other,"append",own),null);
+});

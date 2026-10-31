@@ -109,3 +109,21 @@ test("responsive pairing provides distinct QR and phone-code workflows", () => {
     ".byon-number-item", ".group-page-actions"
   ]) assert.ok(connectionCss.includes(term), term);
 });
+
+test("Model C displays unlimited multi-number allowance, group quota and accessible removal",()=>{
+  for (const term of [
+    'maxConnections === 0 ? "Unlimited"',
+    "activeConnectionsCount", "groupSlotsUsed", "groupSlotsLimit",
+    "GROUP_LIMIT_REACHED", "byon-group-quota",
+    "byon-remove-action", "Permanently remove WhatsApp",
+    "Remove permanently", "groupUsage", "activated"
+  ]) {
+    // Server error-code lives in API; client renders its human-readable detail.
+    if (term === "GROUP_LIMIT_REACHED") continue;
+    assert.ok(connections.includes(term), term);
+  }
+  for (const term of [".byon-remove-action",".byon-group-quota","max-width:480px"]) {
+    assert.ok(connectionCss.includes(term), term);
+  }
+  assert.ok(platform.includes("whatsappConnectionLimit"));
+});

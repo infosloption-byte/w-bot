@@ -23,26 +23,37 @@ const groupProof = z.object({
 
 async function policy(prisma: PrismaClient) {
   return await prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } }) ??
-    { customerNumbersEnabled: false, personalEnabled: true, businessEnabled: true, maxConnectionsPerTenant: 1 };
+    { customerNumbersEnabled: false, personalEnabled: true, businessEnabled: true, maxConnectionsPerTenant: 0 };
 }
 export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaClient, cfg: Config): void {
   if (!cfg.saasEnabled) return;
   app.get("/portal/api/connections", async (req, reply) => {
     const user = await requirePortalAuth(prisma, req, reply);
     if (!user) return;
-    const [rules, connections] = await Promise.all([
+    const [rules, connections, plan] = await Promise.all([
       policy(prisma),
       prisma.customerWhatsAppConnection.findMany({
-        where: { tenantId: user.tenantId, active: true },
-        select: { id: true, label: true, kind: true, status: true, phoneLast4: true,
+        where: { tenantId: user.tenantId },
+        select: { id: true, label: true, kind: true, status: true, active: true, phoneLast4: true,
           createdAt: true, lastSeenAt: true, _count: { select: { groups: true } } },
         orderBy: { createdAt: "desc" }
+      }),
+      prisma.tenantSubscription.findUnique({
+        where: { tenantId: user.tenantId },
+        select: { whatsappConnectionLimit: true, groupLimit: true }
       })
     ]);
+    const planLimit = plan?.whatsappConnectionLimit ?? 0;
+    const effectiveLimit = [rules.maxConnectionsPerTenant, planLimit]
+      .filter(limit => limit > 0);
+    const maxConnections = effectiveLimit.length ? Math.min(...effectiveLimit) : 0;
+    const activeGroups = await prisma.group.count({ where: { tenantId: user.tenantId } });
     return { policy: {
       enabled: cfg.BYON_GATEWAY_ENABLED === "true" && rules.customerNumbersEnabled,
       personalEnabled: rules.personalEnabled, businessEnabled: rules.businessEnabled,
-      maxConnections: rules.maxConnectionsPerTenant
+      maxConnections, planConnections: planLimit,
+      groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+      groupCount: activeGroups
     }, connections };
   });
 
@@ -59,8 +70,13 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       if (!rules || !connectionTypeAllowed(rules, input.kind)) return "DISABLED" as const;
       const plan = await tx.tenantSubscription.findUnique({ where: { tenantId: user.tenantId } });
       if (plan && !planActive(plan)) return "INACTIVE" as const;
-      const count = await tx.customerWhatsAppConnection.count({ where: { tenantId: user.tenantId, active: true } });
-      if (count >= rules.maxConnectionsPerTenant) return "LIMIT" as const;
+      const count = await tx.customerWhatsAppConnection.count({
+        where: { tenantId: user.tenantId, active: true }
+      });
+      const globalLimit = rules.maxConnectionsPerTenant;
+      const planLimit = plan?.whatsappConnectionLimit ?? 0;
+      if ((globalLimit > 0 && count >= globalLimit) ||
+          (planLimit > 0 && count >= planLimit)) return "LIMIT" as const;
       const record = await tx.customerWhatsAppConnection.create({
         data: { tenantId: user.tenantId, kind: input.kind, label: input.label }
       });
@@ -136,7 +152,24 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       const res = await byonRequest(cfg, "/connections/" + c.id + "/groups");
       if (!res.ok) return reply.code(503).send({ error: "Connection unavailable" });
       const data = await res.json() as { groups?: Array<{ groupId: string; name: string }> };
-      return { groups: (data.groups ?? []).filter(g => isWebGroupId(g.groupId)).slice(0, 200) };
+      const discovered = (data.groups ?? []).filter(g => isWebGroupId(g.groupId)).slice(0, 200);
+      const [managed, limits, count] = await Promise.all([
+        prisma.group.findMany({
+          where: { connectionId: c.id, tenantId: user.tenantId },
+          select: { id: true, whatsappGroupId: true, enabled: true }
+        }),
+        getTenantLimits(prisma, cfg, user.tenantId),
+        prisma.group.count({ where: { tenantId: user.tenantId } })
+      ]);
+      const known = new Map(managed.map(g => [g.whatsappGroupId, g]));
+      return {
+        groups: discovered.map(g => {
+          const registered = known.get(g.groupId);
+          return { ...g, activated: !!registered, enabled: registered?.enabled ?? false,
+            managedGroupId: registered?.id ?? null };
+        }),
+        groupUsage: { used: count, limit: limits.groups }
+      };
     } catch { return reply.code(503).send({ error: "Group discovery unavailable" }); }
   });
 
@@ -159,7 +192,10 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       prisma.groupActivation.count({ where: { tenantId: user.tenantId,
         consumedAt: null, expiresAt: { gt: new Date() } } })
     ]);
-    if (count >= limits.groups) return reply.code(409).send({ error: "Group limit reached" });
+    if (count >= limits.groups) return reply.code(409).send({
+      error: "Your plan already uses all " + limits.groups + " group slots. The existing group is connected—open My Groups to manage it. Increase the group allowance in your subscription to activate another group.",
+      code: "GROUP_LIMIT_REACHED", used: count, limit: limits.groups
+    });
     if (pending >= 2) return reply.code(429).send({ error: "Finish existing activation first" });
     if (!allowAttempt("byon-activate:" + user.tenantId, 5, 900_000))
       return reply.code(429).send({ error: "Too many activation attempts" });
@@ -179,20 +215,49 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
     if (!user) return;
     if (user.role === "VIEWER") return reply.code(403).send({ error: "Workspace admin required" });
     const c = await prisma.customerWhatsAppConnection.findFirst({
-      where: { id: req.params.id, tenantId: user.tenantId, active: true }
+      where: { id: req.params.id, tenantId: user.tenantId }
     });
     if (!c) return reply.code(404).send({ error: "Connection not found" });
+    // Revoke access in the DB immediately. If gateway cleanup fails, preserve a
+    // visible revoked record so the workspace can retry; no translation is allowed.
     await prisma.$transaction(async tx => {
       await tx.customerWhatsAppConnection.update({
         where: { id: c.id }, data: { status: "REVOKED", active: false }
       });
-      await tx.group.updateMany({ where: { connectionId: c.id }, data: { enabled: false } });
-      await tx.tenantAudit.create({ data: { tenantId: user.tenantId,
-        actorId: user.userId, action: "WHATSAPP_CONNECTION_REVOKED" } });
+      await tx.group.updateMany({
+        where: { connectionId: c.id, tenantId: user.tenantId }, data: { enabled: false }
+      });
     });
-    try { await byonRequest(cfg, "/connections/" + c.id + "/revoke", "POST", {}); }
-    catch { app.log.warn("Remote session cleanup deferred; database access revoked"); }
-    return { revoked: true };
+    try {
+      const result = await byonRequest(cfg, "/connections/" + c.id + "/revoke", "POST", {});
+      if (!result.ok) return reply.code(202).send({
+        removed: false, pending: true,
+        message: "Translation stopped. WhatsApp unlink is pending; retry Remove account."
+      });
+    } catch {
+      return reply.code(202).send({
+        removed: false, pending: true,
+        message: "Translation stopped. WhatsApp unlink is pending; retry Remove account."
+      });
+    }
+    // Deleting the connection also permanently deletes only its groups and
+    // their related stored messages. All other workspace sessions stay intact.
+    await prisma.$transaction(async tx => {
+      await tx.groupActivation.deleteMany({
+        where: { connectionId: c.id, tenantId: user.tenantId }
+      });
+      await tx.group.deleteMany({
+        where: { connectionId: c.id, tenantId: user.tenantId }
+      });
+      await tx.customerWhatsAppConnection.delete({
+        where: { id: c.id, tenantId: user.tenantId }
+      });
+      await tx.tenantAudit.create({ data: {
+        tenantId: user.tenantId, actorId: user.userId,
+        action: "WHATSAPP_CONNECTION_PERMANENTLY_REMOVED"
+      } });
+    });
+    return { removed: true };
   });
 
   app.post("/internal/byon/activate", async (req, reply) => {

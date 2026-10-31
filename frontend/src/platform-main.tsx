@@ -12,7 +12,7 @@ type Overview = { tenants: number; users: number; groups: number; enabledGroups:
   messagesThisMonth: number; queued: number; failures: number; uncertain: number;
   gateway: { status: string; checkedAt: string | null; changedAt: string | null } };
 type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
-  groupLimit: number; monthlyMessages: number; periodEnd: string | null };
+  groupLimit: number; monthlyMessages: number; whatsappConnectionLimit: number; periodEnd: string | null };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
   memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null };
 type Group = { id: string; name: string; enabled: boolean; gateway: string;
@@ -79,6 +79,7 @@ function Console() {
   const [planStatus, setPlanStatus] = useState<Plan["status"]>("TRIAL");
   const [groupLimit, setGroupLimit] = useState(3);
   const [monthlyMessages, setMonthlyMessages] = useState(1000);
+  const [whatsappConnectionLimit, setWhatsappConnectionLimit] = useState(0);
   const [pendingGroup, setPendingGroup] = useState<Group | null>(null);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -135,6 +136,7 @@ function Console() {
     setPlanStatus(t.subscription?.status ?? "TRIAL");
     setGroupLimit(t.subscription?.groupLimit ?? 3);
     setMonthlyMessages(t.subscription?.monthlyMessages ?? 1000);
+    setWhatsappConnectionLimit(t.subscription?.whatsappConnectionLimit ?? 0);
     setNotice(""); setError("");
   }
 
@@ -146,7 +148,7 @@ function Console() {
       await platformApi("/tenants/" + encodeURIComponent(editing.id) + "/subscription", {
         method: "PATCH",
         body: JSON.stringify({
-          planCode, status: planStatus, groupLimit, monthlyMessages,
+          planCode, status: planStatus, groupLimit, monthlyMessages, whatsappConnectionLimit,
           periodEnd: editing.subscription?.periodEnd ?? null
         })
       });
@@ -477,6 +479,8 @@ function Console() {
               aria-pressed={planStatus === status} onClick={() => setPlanStatus(status)}>{status.replace("_"," ")}</button>)}</div>
           <label>Maximum groups<input type="number" min={0} max={1000} value={groupLimit} onChange={e => setGroupLimit(Number(e.target.value))}/></label>
           <label>Monthly messages<input type="number" min={0} max={1000000} value={monthlyMessages} onChange={e => setMonthlyMessages(Number(e.target.value))}/></label>
+           <label>WhatsApp connections (0 = unlimited)<input type="number" min={0} max={1000}
+             value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
           <div className="modal-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
             <button className="button primary" disabled={busy} type="submit">Save subscription</button></div>
         </form>

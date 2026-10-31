@@ -24,6 +24,7 @@ const changePlan = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
   groupLimit: z.number().int().min(0).max(1000),
   monthlyMessages: z.number().int().min(0).max(1_000_000),
+  whatsappConnectionLimit: z.number().int().min(0).max(1000).default(0),
   periodEnd: z.string().datetime().nullable().optional()
 }).strict();
 const languageName = z.string().trim().min(2).max(80)
@@ -187,7 +188,7 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         subscription: {
           select: {
             planCode: true, status: true, groupLimit: true,
-            monthlyMessages: true, periodEnd: true
+            monthlyMessages: true, whatsappConnectionLimit: true, periodEnd: true
           }
         },
         members: {
@@ -364,11 +365,13 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         create: {
           tenantId: tenant.id, planCode: body.planCode, status: body.status,
           groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+          whatsappConnectionLimit: body.whatsappConnectionLimit,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         },
         update: {
           planCode: body.planCode, status: body.status,
           groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+          whatsappConnectionLimit: body.whatsappConnectionLimit,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         }
       });
@@ -380,7 +383,8 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
     return {
       saved: true, plan: {
         code: plan.planCode, status: plan.status,
-        groupLimit: plan.groupLimit, monthlyMessages: plan.monthlyMessages
+        groupLimit: plan.groupLimit, monthlyMessages: plan.monthlyMessages,
+        whatsappConnectionLimit: plan.whatsappConnectionLimit
       }
     };
   });

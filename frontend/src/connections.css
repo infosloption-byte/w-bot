@@ -99,3 +99,23 @@
 .byon-admin-layout .platform-table small{display:block;overflow-wrap:anywhere;color:#9fb8c5;font-size:11px}
 @media(max-width:1100px){.byon-admin-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:700px){.byon-admin-layout .panel{padding:17px}.byon-admin-layout .platform-table td{grid-template-columns:minmax(75px,32%) minmax(0,1fr)}.byon-admin-layout .form>.button{width:100%}}
+
+/* Multiple sessions: keep removal reachable without navigating to the bottom. */
+.byon-number-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;min-width:0}
+.byon-number-row>.byon-number-item{min-width:0;margin:0}
+.byon-remove-action{min-height:44px;padding:8px 11px;border-radius:10px;border:1px solid #73434f;background:#341c29;color:#ffd6d9;font-size:12px;font-weight:700}
+.byon-remove-action:hover:not(:disabled){background:#502632;border-color:#c46c7d}
+.byon-count{white-space:normal;text-align:center}
+.byon-group-quota{display:flex;flex-wrap:wrap;justify-content:space-between;gap:7px;padding:12px 14px;border-radius:11px;background:#142a32;border:1px solid #2d5661}
+.byon-group-quota span{font-size:12px;color:#b5cad2}
+.byon-group-quota strong{font-size:13px;color:#71e8cc}
+.byon-group-quota.is-full{background:#33282d;border-color:#8f5c55}
+.byon-group-quota.is-full strong{color:#fac28a}
+.byon-group-quota p{width:100%;font-size:12px;line-height:1.6;color:#f1cbc1;margin:4px 0 0}
+.byon-group-activated{margin-left:auto;flex-shrink:0;color:#6ae0b7;font-size:11px;font-weight:700}
+@media(max-width:480px){
+  .byon-number-row{grid-template-columns:minmax(0,1fr)}
+  .byon-remove-action{width:100%;text-align:center}
+  .byon-group-item{flex-wrap:wrap}
+  .byon-group-activated{margin-left:0}
+}

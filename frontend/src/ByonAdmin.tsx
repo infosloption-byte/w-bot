@@ -25,7 +25,7 @@ async function api<T>(route: string, method = "GET", body?: unknown): Promise<T>
 export function ByonAdmin({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [settings, setSettings] = useState<Policy>({
     customerNumbersEnabled: false, personalEnabled: true,
-    businessEnabled: true, maxConnectionsPerTenant: 1
+    businessEnabled: true, maxConnectionsPerTenant: 0
   });
   const [configured, setConfigured] = useState(false);
   const [connections, setConnections] = useState<Connected[]>([]);
@@ -77,10 +77,11 @@ export function ByonAdmin({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           disabled={!isSuperAdmin}
           onChange={e => setSettings({ ...settings, businessEnabled: e.target.checked })}/>
           <span>Allow dedicated business WhatsApp accounts</span></label>
-        <label>Maximum connections per workspace
-          <input type="number" min={1} max={10} value={settings.maxConnectionsPerTenant}
+        <label>Global maximum connections per workspace (0 = unlimited)
+          <input type="number" min={0} max={1000} value={settings.maxConnectionsPerTenant}
             disabled={!isSuperAdmin}
             onChange={e => setSettings({ ...settings, maxConnectionsPerTenant: Number(e.target.value) })}/></label>
+        <p className="muted text-small">0 means unlimited for this pilot, subject to the BYON gateway's configured session capacity. Workspace-specific number limits can be set under Customers → Manage plan.</p>
         {isSuperAdmin && <button className="button primary" type="submit" disabled={busy}>
           Save platform policy</button>}
       </form>

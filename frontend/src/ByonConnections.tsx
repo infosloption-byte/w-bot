@@ -3,10 +3,11 @@ import React, { useCallback, useEffect, useState } from "react";
 type Kind = "PERSONAL" | "BUSINESS";
 type Connection = {
   id: string; label: string; kind: Kind; status: string;
-  phoneLast4: string | null; createdAt: string; _count?: { groups: number }
+  phoneLast4: string | null; createdAt: string; active: boolean; _count?: { groups: number }
 };
 type Policy = {
-  enabled: boolean; personalEnabled: boolean; businessEnabled: boolean; maxConnections: number
+  enabled: boolean; personalEnabled: boolean; businessEnabled: boolean; maxConnections: number;
+  planConnections: number; groupLimit: number; groupCount: number
 };
 type Details = {
   connection: Connection;
@@ -44,7 +45,10 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
   const [method, setMethod] = useState<"qr" | "code">("qr");
   const [timeNow, setTimeNow] = useState(Date.now());
   const [groupConsent, setGroupConsent] = useState(false);
-  const [groups, setGroups] = useState<Array<{ groupId: string; name: string }>>([]);
+  const [groups, setGroups] = useState<Array<{
+    groupId: string; name: string; activated: boolean; enabled: boolean; managedGroupId: string | null
+  }>>([]);
+  const [groupUsage, setGroupUsage] = useState<{ used: number; limit: number } | null>(null);
   const [groupListLoaded, setGroupListLoaded] = useState(false);
   const [activation, setActivation] = useState<{ code: string; expiresAt: string } | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
@@ -58,11 +62,11 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
     setPolicy(result.policy);
     setConnections(result.connections);
     setSelected(current => current && result.connections.some(c => c.id === current) ?
-      current : result.connections[0]?.id ?? null);
+      current : result.connections.find(c => c.active)?.id ?? result.connections[0]?.id ?? null);
   }, []);
   useEffect(() => { void refresh().catch(e => setError(String(e))); }, [refresh]);
   useEffect(() => {
-    if (!selected) { setDetails(null); return; }
+    if (!selected || connections.find(c => c.id === selected)?.active === false) { setDetails(null); return; }
     let cancelled = false;
     const poll = async () => {
       try {
@@ -79,19 +83,25 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
     void poll();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void poll(); }, 5000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [selected, refresh]);
+  }, [selected, refresh, connections.find(c => c.id === selected)?.active]);
 
   const active = connections.find(c => c.id === selected);
-  const connected = (details?.connection.status ?? active?.status) === "CONNECTED";
+  const connected = active?.active !== false &&
+    (details?.connection.status ?? active?.status) === "CONNECTED";
+  const activeConnectionsCount = connections.filter(c => c.active).length;
+  const maxConnections = policy?.maxConnections ?? 0; // 0 means unlimited
   const canCreate = Boolean(policy?.enabled &&
-    connections.length < (policy?.maxConnections ?? 0));
-  const canPair = Boolean(policy?.enabled && active &&
+    (maxConnections === 0 || activeConnectionsCount < maxConnections));
+  const groupSlotsUsed = groupUsage?.used ?? policy?.groupCount ?? 0;
+  const groupSlotsLimit = groupUsage?.limit ?? policy?.groupLimit ?? 0;
+  const groupsFull = groupSlotsUsed >= groupSlotsLimit;
+  const canPair = Boolean(policy?.enabled && active?.active &&
     (active.kind === "PERSONAL" ? policy.personalEnabled : policy.businessEnabled));
   const expiresIn = details?.pairExpiresAt ?
     Math.max(0, Math.ceil((details.pairExpiresAt - timeNow) / 1000)) : null;
 
   function switchConnection(id: string) {
-    setSelected(id); setDetails(null); setGroups([]); setGroupListLoaded(false);
+    setSelected(id); setDetails(null); setGroups([]); setGroupListLoaded(false); setGroupUsage(null);
     setActivation(null); setPhone(""); setGroupConsent(false);
     setError(""); setNotice(""); setShowCreate(false);
   }
@@ -125,15 +135,17 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
     if (!selected) return;
     setGroupLoading(true); setError("");
     try {
-      const data = await request<{ groups: Array<{ groupId: string; name: string }> }>(
+      const data = await request<{ groups: Array<{
+        groupId: string; name: string; activated: boolean; enabled: boolean; managedGroupId: string | null
+      }>; groupUsage: { used: number; limit: number } }>(
         "/connections/" + encodeURIComponent(selected) + "/groups"
       );
-      setGroups(data.groups); setGroupListLoaded(true);
+      setGroups(data.groups); setGroupUsage(data.groupUsage); setGroupListLoaded(true);
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load joined groups"); }
     finally { setGroupLoading(false); }
   }
   async function activate() {
-    if (!selected || !groupConsent) return;
+    if (!selected || !groupConsent || groupsFull) return;
     setBusy(true); setError("");
     try {
       const result = await request<{ code: string; expiresAt: string }>(
@@ -151,14 +163,20 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
   }
   async function revoke() {
     if (!confirmRevoke) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setNotice("");
     try {
-      await request("/connections/" + encodeURIComponent(confirmRevoke), "DELETE");
-      setConfirmRevoke(null); setSelected(null); setDetails(null);
+      const result = await request<{ removed: boolean; pending?: boolean; message?: string }>(
+        "/connections/" + encodeURIComponent(confirmRevoke), "DELETE"
+      );
+      setConfirmRevoke(null); setDetails(null);
       setGroups([]); setActivation(null); setGroupListLoaded(false);
+      if (result.removed) setSelected(null);
       await refresh();
-      setNotice("Account disconnected. Groups using this number have been paused.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Disconnect failed"); }
+      setNotice(result.removed ?
+        "WhatsApp connection, its groups and their stored translations were permanently removed." :
+        result.message ?? "Connection paused; cleanup pending. Use Remove again to retry.");
+      if (result.removed) onManageGroups?.();
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to remove account"); }
     finally { setBusy(false); }
   }
 
@@ -182,11 +200,11 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
       <section className="panel byon-numbers-panel" aria-label="Your WhatsApp connections">
         <div className="byon-panel-heading">
           <div><div className="eyebrow">01 / YOUR NUMBERS</div><h3>Connected accounts</h3></div>
-          <span className="byon-count">{connections.length} / {policy?.maxConnections ?? 1}</span>
+          <span className="byon-count">{activeConnectionsCount} / {maxConnections === 0 ? "Unlimited" : maxConnections}</span>
         </div>
         <p className="muted text-small">Choose an existing account or link a number you control. A dedicated WhatsApp number is recommended.</p>
         <div className="byon-number-list">
-          {connections.map(c => <button key={c.id} type="button"
+          {connections.map(c => <div key={c.id} className="byon-number-row"><button type="button"
             className={"byon-number-item" + (selected === c.id ? " is-active" : "")}
             aria-pressed={selected === c.id} onClick={() => switchConnection(c.id)}>
             <span className="byon-number-icon" aria-hidden="true">☎</span>
@@ -196,7 +214,11 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
             <span className={"byon-state" + (c.status === "CONNECTED" ? " is-online" : "")}>
               {statusLabel(c.status)}
             </span>
-          </button>)}
+          </button>
+          <button type="button" className="byon-remove-action"
+            aria-label={"Remove " + c.label + " WhatsApp connection"}
+            disabled={busy} onClick={() => setConfirmRevoke(c.id)}>Remove</button>
+          </div>)}
           {!connections.length && <div className="byon-empty">
             <div className="byon-empty-icon" aria-hidden="true">♧</div>
             <strong>No WhatsApp account added</strong>
@@ -317,22 +339,28 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
             <div className="byon-next">
               <div className="eyebrow">03 / ACTIVATE A GROUP</div>
               <h3>Choose your translation groups</h3>
-              <p className="muted text-small">Discover the WhatsApp groups this account has joined. Each group needs an activation command from a group administrator.</p>
+              <p className="muted text-small">Already activated groups do not need another verification code. Manage their languages in My Groups.</p>
+              <div className={"byon-group-quota" + (groupsFull ? " is-full" : "")} role="status">
+                <span>Plan group slots</span>
+                <strong>{groupSlotsUsed} / {groupSlotsLimit}</strong>
+                {groupsFull && <p>All group slots are in use. Your existing group remains connected. Open My Groups to manage it. Platform Admin can increase your plan group allowance for new groups.</p>}
+              </div>
               <button type="button" className="button secondary" disabled={groupLoading}
                 onClick={() => void discover()}>{groupLoading ? "Loading groups…" : "View joined groups"}</button>
               {groupListLoaded && <div className="byon-group-list">
                 {groups.length ? groups.map(g => <div key={g.groupId} className="byon-group-item">
                   <span aria-hidden="true">♧</span><span>{g.name}</span>
+                  {g.activated && <span className="byon-group-activated">✓ {g.enabled ? "Activated" : "Paused"}</span>}
                 </div>) : <p className="muted text-small">No groups found. Add this account to a WhatsApp group first.</p>}
               </div>}
-              <label className="byon-check"><input type="checkbox" checked={groupConsent}
+              {!groupsFull && <label className="byon-check"><input type="checkbox" checked={groupConsent}
                 onChange={e => setGroupConsent(e.target.checked)}/>
                 <span>I manage the group and its participants know messages will be translated with external AI services.</span>
-              </label>
-              <button type="button" className="button primary byon-main-button"
+              </label>}
+              {!groupsFull && <button type="button" className="button primary byon-main-button"
                 disabled={!groupConsent || busy} onClick={() => void activate()}>
                 {busy ? "Preparing…" : "Generate group activation code"}
-              </button>
+              </button>}
               {activation && <div className="byon-activation">
                 <div className="eyebrow">SEND IN YOUR WHATSAPP GROUP</div>
                 <div className="byon-activation-command"><code>/wbot connect {activation.code}</code>
@@ -343,24 +371,24 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
                   View activated groups
                 </button>
               </div>}
-              {!activation && <button type="button" className="text-button byon-manage-link"
-                onClick={onManageGroups}>View my activated groups →</button>}
+              <button type="button" className="text-button byon-manage-link"
+                onClick={onManageGroups}>View my activated groups →</button>
             </div>
           </>}
           <div className="byon-footer-actions">
             <button type="button" className="text-button danger-action" disabled={busy}
-              onClick={() => setConfirmRevoke(selected)}>Disconnect this WhatsApp account</button>
+              onClick={() => setConfirmRevoke(selected)}>Permanently remove this WhatsApp account</button>
           </div>
         </>}
       </section>
     </div>
     {confirmRevoke && <div className="modal-backdrop">
       <section className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="byon-revoke-title">
-        <h2 id="byon-revoke-title">Disconnect WhatsApp account?</h2>
-        <p className="muted">W-Bot will unlink this account and pause its active translation groups. This cannot be undone without pairing again.</p>
+        <h2 id="byon-revoke-title">Permanently remove WhatsApp connection?</h2>
+        <p className="muted">This unlinks the device and permanently deletes this connection, its activated group configurations and their stored translation history. Other numbers and shared-bot groups are unaffected. This cannot be undone.</p>
         <div className="modal-actions">
           <button type="button" className="button secondary" onClick={() => setConfirmRevoke(null)} disabled={busy}>Keep connected</button>
-          <button type="button" className="button primary" onClick={() => void revoke()} disabled={busy}>Disconnect account</button>
+          <button type="button" className="button primary" onClick={() => void revoke()} disabled={busy}>{busy ? "Removing…" : "Remove permanently"}</button>
         </div>
       </section>
     </div>}

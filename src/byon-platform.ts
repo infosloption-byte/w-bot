@@ -9,7 +9,7 @@ const policyInput = z.object({
   customerNumbersEnabled: z.boolean(),
   personalEnabled: z.boolean(),
   businessEnabled: z.boolean(),
-  maxConnectionsPerTenant: z.number().int().min(1).max(10)
+  maxConnectionsPerTenant: z.number().int().min(0).max(1000)
 }).strict();
 
 export function registerByonPlatformRoutes(app: FastifyInstance, prisma: PrismaClient, cfg: Config) {
@@ -22,7 +22,7 @@ export function registerByonPlatformRoutes(app: FastifyInstance, prisma: PrismaC
       gatewayConfigured: cfg.BYON_GATEWAY_ENABLED === "true",
       policy: rule ?? {
         customerNumbersEnabled: false, personalEnabled: true,
-        businessEnabled: true, maxConnectionsPerTenant: 1
+        businessEnabled: true, maxConnectionsPerTenant: 0
       }
     };
   });

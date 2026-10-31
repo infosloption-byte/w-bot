@@ -78,7 +78,12 @@ async function post(path, payload) {
         headers: { authorization: "Bearer " + token, "content-type": "application/json" },
         body: JSON.stringify(payload), signal: AbortSignal.timeout(9000)
       });
-      if (response.ok) return true;
+      if (response.ok) {
+        const result = await response.json().catch(() => ({}));
+        // Ingress replies 202 with {accepted:false} for disabled or unknown
+        // groups. A successful transport response is not always a queued job.
+        return result.accepted ?? result.activated ?? true;
+      }
       if ([400,401,403,404].includes(response.status)) return false;
     } catch { /* temporary API connection outage */ }
     await wait(400 * 2 ** retry);
@@ -239,12 +244,20 @@ async function connect(id, phoneNumber) {
         const incoming = extractByonLiveMessage(
           msg, type, ws.user?.id ?? ws.user?.lid, entry.recentOutboundIds
         );
+        if (msg?.key?.fromMe && isGroupJid(msg.key.remoteJid)) {
+          // Only message type and acceptance flags; no text, phone number,
+          // group JID, message IDs or pairing credentials are logged.
+          console.info("BYON own group event", { type, extracted: Boolean(incoming) });
+        }
         if (!incoming) continue;
         const code = parseActivationCommand(incoming.text);
         if (code) {
           void activation(entry, msg, incoming, code);
         } else {
-          void post("/internal/byon/message", { connectionId: id, ...incoming });
+          void post("/internal/byon/message", { connectionId: id, ...incoming })
+            .then(accepted => {
+              if (msg?.key?.fromMe) console.info("BYON own group ingress", { accepted });
+            });
         }
       }
     });

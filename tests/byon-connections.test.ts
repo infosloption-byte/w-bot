@@ -122,6 +122,8 @@ test("customer-owned connection policy defaults to disabled in a fresh database"
   const db={
     portalSession:{findUnique:async()=>session},
     whatsAppConnectionPolicy:{findUnique:async()=>null},
+    tenantSubscription:{findUnique:async()=>null},
+    group:{count:async()=>0},
     customerWhatsAppConnection:{findMany:async()=>[]}
   } as unknown as PrismaClient;
   const app=Fastify();registerByonPortalRoutes(app,db,cfg);
@@ -163,5 +165,91 @@ test("valid gateway token still cannot claim a connection for a different tenant
   });
   assert.equal(response.statusCode,403);
   assert.equal(created,false);
+  await app.close();
+});
+
+test("pilot allows multiple numbers when global and plan allowances are zero",async()=>{
+  const db={
+    portalSession:{findUnique:async()=>session},
+    whatsAppConnectionPolicy:{findUnique:async()=>({
+      personalEnabled:true,businessEnabled:true,
+      customerNumbersEnabled:true,maxConnectionsPerTenant:0
+    })},
+    customerWhatsAppConnection:{findMany:async()=>[
+      { id:"number-1",active:true },{id:"number-2",active:true}
+    ]},
+    tenantSubscription:{findUnique:async()=>({
+      whatsappConnectionLimit:0,groupLimit:1
+    })},
+    group:{count:async()=>1}
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  const r=await app.inject({method:"GET",url:"/portal/api/connections",headers:userHeaders});
+  assert.equal(r.statusCode,200);
+  assert.equal(r.json().policy.maxConnections,0);
+  assert.equal(r.json().connections.length,2);
+  assert.equal(r.json().policy.groupCount,1);
+  assert.equal(r.json().policy.groupLimit,1);
+  await app.close();
+});
+test("per-workspace subscription overrides unlimited global allowance",async()=>{
+  const db={
+    portalSession:{findUnique:async()=>session},
+    whatsAppConnectionPolicy:{findUnique:async()=>({
+      personalEnabled:true,businessEnabled:true,
+      customerNumbersEnabled:true,maxConnectionsPerTenant:0
+    })},
+    customerWhatsAppConnection:{findMany:async()=>[]},
+    tenantSubscription:{findUnique:async()=>({
+      whatsappConnectionLimit:5,groupLimit:2
+    })},
+    group:{count:async()=>0}
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  const r=await app.inject({method:"GET",url:"/portal/api/connections",headers:userHeaders});
+  assert.equal(r.statusCode,200);
+  assert.equal(r.json().policy.maxConnections,5);
+  await app.close();
+});
+test("activation returns actionable 409 when the plan's existing group is full",async()=>{
+  const db={
+    portalSession:{findUnique:async()=>session},
+    customerWhatsAppConnection:{findFirst:async()=>({
+      id:"cktb92lxp000007n3qux1329d",tenantId:"tenant-a",
+      active:true,kind:"PERSONAL",status:"CONNECTED"
+    })},
+    whatsAppConnectionPolicy:{findUnique:async()=>({
+      customerNumbersEnabled:true,personalEnabled:true,businessEnabled:true,
+      maxConnectionsPerTenant:0
+    })},
+    tenantSubscription:{findUnique:async()=>({
+      planCode:"PILOT",status:"ACTIVE",periodEnd:null,groupLimit:1,
+      monthlyMessages:500,whatsappConnectionLimit:0
+    })},
+    group:{count:async()=>1},
+    groupActivation:{count:async()=>0}
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  const r=await app.inject({method:"POST",url:"/portal/api/connections/activations",
+    headers:userHeaders,payload:{
+      connectionId:"cktb92lxp000007n3qux1329d",consentConfirmed:true
+    }});
+  assert.equal(r.statusCode,409);
+  assert.equal(r.json().code,"GROUP_LIMIT_REACHED");
+  assert.equal(r.json().used,1);
+  assert.equal(r.json().limit,1);
+  await app.close();
+});
+test("foreign workspace cannot permanently remove another tenant's WhatsApp session",async()=>{
+  const db={
+    portalSession:{findUnique:async()=>session},
+    customerWhatsAppConnection:{findFirst:async(args:{where:{tenantId:string}})=>{
+      assert.equal(args.where.tenantId,"tenant-a");return null;
+    }}
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  const r=await app.inject({method:"DELETE",
+    url:"/portal/api/connections/cktb92lxp000007n3qux1329d",headers:userHeaders});
+  assert.equal(r.statusCode,404);
   await app.close();
 });

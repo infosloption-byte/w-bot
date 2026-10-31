@@ -16,6 +16,7 @@ export async function getTenantLimits(prisma: PrismaClient, cfg: Config, tenantI
     plan: subscription?.planCode ?? "PILOT",
     status: subscription?.status ?? "TRIAL",
     groups: subscription?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+    whatsappConnections: subscription?.whatsappConnectionLimit ?? 0,
     messagesPerMonth: subscription?.monthlyMessages ?? cfg.SAAS_MONTHLY_MESSAGES,
     periodEnd: subscription?.periodEnd ?? null
   };
