@@ -87,7 +87,7 @@ const connectionCss = fromRoot("src/connections.css");
 test("activated personal and business groups refresh automatically and identify their linked number", () => {
   for (const term of [
     "const refreshGroups = useCallback",
-    'view !== "translation" || (translationTab !== "groups" && translationTab !== "overview")',
+    'view !== "dashboard" && (view !== "translation" || (translationTab !== "groups" && translationTab !== "overview"))',
     "window.setInterval",
     'api<{ groups: Group[] }>("/groups")',
     "manualGroupRefresh",
