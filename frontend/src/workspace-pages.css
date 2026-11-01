@@ -1,0 +1,37 @@
+/* Focused customer workspace pages, added after the shared visual system */
+.is-hidden{display:none!important}
+.byon-layout>.panel:not(.is-hidden){grid-column:1/-1}
+.byon-layout>.byon-numbers-panel:not(.is-hidden){max-width:none}
+.byon-layout .byon-number-list{grid-template-columns:repeat(auto-fit,minmax(min(100%,265px),1fr))}
+.byon-layout .byon-setup-panel:not(.is-hidden){max-width:1050px}
+.byon-setup-panel .quick-setup select{min-width:220px;max-width:100%;padding:11px 13px;border:1px solid #456276;border-radius:10px;background:#112338;color:#eef8fb;min-height:44px}
+.alert-page-grid{grid-template-columns:minmax(0,1fr);max-width:1060px}
+.alert-page-grid>.panel{min-width:0}
+.alert-page-grid .alert-session-list{margin:18px 0}
+.smart-alerts>.home-service-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
+.smart-alerts>.home-service-grid .home-service-card{padding:24px}
+.alert-inbox{max-width:1040px}
+.account-grid>.panel{max-width:940px}
+.account-grid .form{max-width:580px}
+.platform-dashboard .platform-metrics{gap:15px}
+.platform-dashboard .platform-metrics .metric{min-height:140px}
+.dashboard .sidebar nav .sidebar-subnav{min-width:0}
+.dashboard.nav-collapsed .sidebar nav .sidebar-subnav{display:none}
+.dashboard .sidebar nav .sidebar-subnav button{width:100%;text-align:left}
+@media(max-width:900px){
+ .dashboard .sidebar nav .sidebar-subnav{display:grid!important}
+ .dashboard .sidebar.is-mobile-open{background:#0b1929}
+ .dashboard .sidebar .sidebar-subnav button{min-height:38px}
+ .dashboard .sidebar nav .nav-item{min-height:44px}
+}
+@media(max-width:640px){
+ .dashboard .sidebar .sidebar-subnav{margin-left:39px}
+ .byon-setup-panel .quick-setup{display:grid}
+ .byon-setup-panel .quick-setup .byon-field{width:100%}
+ .byon-setup-panel .quick-setup select{width:100%}
+ .smart-alerts>.home-service-grid{grid-template-columns:1fr}
+ .dashboard .home-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:400px){
+ .dashboard .home-stat-grid{grid-template-columns:1fr}
+}
