@@ -1,0 +1,30 @@
+.feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.feature-grid>.alert{grid-column:1/-1}
+.feature-panel{display:flex;flex-direction:column;gap:12px}
+.feature-panel h3{margin:0}.feature-panel p{margin:0 0 8px}
+.feature-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.smart-alerts{display:grid;gap:22px}
+.alert-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+.alert-usage{display:flex;flex-wrap:wrap;gap:24px;margin:15px 0}
+.alert-usage>div{display:grid;gap:3px;min-width:120px}
+.alert-usage strong{font-size:22px;font-weight:800;color:#edf9f9}
+.alert-usage small{color:#91aabb}
+.alert-field{display:grid;gap:8px;font-size:12px;color:#bcd1d9;font-weight:600}
+.alert-field input,.alert-field select{width:100%;padding:12px 13px;background:#101e2b;border:1px solid #315064;border-radius:11px;color:#ecf8fa;min-height:44px}
+.alert-field input:focus-visible,.alert-field select:focus-visible{outline:2px solid #3edbc4;outline-offset:2px}
+.alert-field select{color-scheme:dark}
+.alert-form{display:grid;gap:14px}
+.alert-form-split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.alert-items{margin-top:18px}
+.alert-item{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #2b4050;padding:14px 0}
+.alert-item strong,.alert-item small{display:block;overflow-wrap:anywhere}
+.alert-item small{font-size:11px;color:#8ca7b7;margin-top:4px}
+.alert-actions{display:flex;gap:9px;flex-wrap:wrap}
+.alert-inbox{display:grid;gap:14px}
+.alert-match{padding:16px;border:1px solid #284858;border-radius:13px;background:#142838}
+.alert-match.is-read{opacity:.75}
+.alert-match-header{display:flex;gap:12px;justify-content:space-between;flex-wrap:wrap}
+.alert-match p{overflow-wrap:anywhere;white-space:normal}
+.alert-match-meta{display:flex;gap:12px;flex-wrap:wrap;color:#89d6cc;font-size:12px}
+@media(max-width:950px){.feature-grid,.alert-columns{grid-template-columns:1fr}}
+@media(max-width:600px){.alert-form-split{grid-template-columns:1fr}.alert-item{align-items:start;flex-direction:column}}
