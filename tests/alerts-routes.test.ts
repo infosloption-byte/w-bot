@@ -23,7 +23,8 @@ test("Smart Alerts workspace endpoints deny unauthenticated requests", async () 
   const app = Fastify();
   registerAlertsRoutes(app, {} as PrismaClient, cfg);
   for (const url of ["/portal/api/features", "/portal/api/alerts/groups",
-    "/portal/api/alerts/rules", "/portal/api/alerts/inbox"]) {
+    "/portal/api/alerts/rules", "/portal/api/alerts/inbox",
+    "/portal/api/alerts/notification-channel", "/portal/api/alerts/inbox/example"]) {
     assert.equal((await app.inject({ method: "GET", url })).statusCode, 401, url);
   }
   await app.close();
