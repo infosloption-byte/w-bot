@@ -63,8 +63,13 @@ export async function ingestTenantMessage(
       // new month; an empty Prisma upsert update could race.
       await tx.$executeRaw`INSERT IGNORE INTO TenantUsage (tenantId, month, messages)
         VALUES (${details.tenantId}, ${month}, 0)`;
+      // 0 is the explicit unlimited-text allowance for paid tiers. Keep
+      // counting accepted messages for monitoring, abuse controls and invoicing.
       const used = await tx.tenantUsage.updateMany({
-        where: { tenantId: details.tenantId, month, messages: { lt: limit } },
+        where: {
+          tenantId: details.tenantId, month,
+          ...(limit === 0 ? {} : { messages: { lt: limit } })
+        },
         data: { messages: { increment: 1 } }
       });
       if (!used.count) throw new QuotaExceededError();

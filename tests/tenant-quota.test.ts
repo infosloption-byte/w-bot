@@ -66,6 +66,43 @@ test("reservations reject repeated messages and enforce a tenant allowance", asy
   assert.equal(created, 3); // fake lacks transaction rollback; real MySQL rolls back #3
 });
 
+test("unlimited tier still counts distinct source messages without a cap", async () => {
+  let usage = 0;
+  const seen = new Set<string>();
+  const db = {
+    $transaction: async (callback: (tx: unknown) => Promise<boolean>) => callback({
+      tenantSubscription: { findUnique: async () => ({
+        status: "ACTIVE", periodEnd: null, monthlyMessages: 0
+      }) },
+      group: { findFirst: async () => ({ id: "group-A" }) },
+      message: { create: async (args: { data: { externalMessageId: string } }) => {
+        const id = args.data.externalMessageId;
+        if (seen.has(id)) throw new Prisma.PrismaClientKnownRequestError(
+          "duplicate", { code: "P2002", clientVersion: "6.19.0" }
+        );
+        seen.add(id);
+      } },
+      $executeRaw: async () => 1,
+      tenantUsage: { updateMany: async (args: { where: { messages?: unknown } }) => {
+        assert.equal("messages" in args.where, false, "unlimited must omit the cap filter");
+        usage++;
+        return { count: 1 };
+      } }
+    })
+  };
+  for (let i = 0; i < 12; i++) {
+    assert.equal(await ingestTenantMessage(db as never, cfg(), {
+      tenantId: "tenant-A", groupId: "group-A", messageId: String(i),
+      senderId: "sender-A", text: "Tour request"
+    }), true);
+  }
+  assert.equal(await ingestTenantMessage(db as never, cfg(), {
+    tenantId: "tenant-A", groupId: "group-A", messageId: "0",
+    senderId: "sender-A", text: "Tour request"
+  }), false);
+  assert.equal(usage, 12);
+});
+
 test("quota reservations ignore foreign or disabled group ownership", async () => {
   let used = false;
   const db = {

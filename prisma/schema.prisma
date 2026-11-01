@@ -173,8 +173,8 @@ model TenantSubscription {
   planCode       String  @default("PILOT") @db.VarChar(30)
   status         SubscriptionStatus @default(TRIAL)
   groupLimit     Int     @default(3)
-  monthlyMessages Int   @default(1000)
-  whatsappConnectionLimit Int @default(0) // 0 = unlimited during pilot
+  monthlyMessages Int   @default(1000) // 0 = unlimited accepted source text messages
+  whatsappConnectionLimit Int @default(0) // 0 = unlimited during pilot; commercial tiers have finite limits
   periodEnd      DateTime?
   updatedAt      DateTime @updatedAt
 }

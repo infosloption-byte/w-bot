@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
 import { registerByonPlatformRoutes } from "./byon-platform.js";
+import { PAID_PLANS, paidPlanFor } from "./plan-catalog.js";
 import { isValidLanguageCode } from "./languages.js";
 import {
   allowAttempt, digest, hashPassword, verifyPassword, requireMutationHeader
@@ -144,6 +145,12 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
     });
     reply.header("set-cookie", cookie("", cfg.SAAS_COOKIE_SECURE === "true", 0));
     return { changed: true, signInRequired: true };
+  });
+
+  app.get("/portal/api/platform/plans", async (req, reply) => {
+    const admin = await adminIdentity(prisma, req, reply);
+    if (!admin) return;
+    return { plans: PAID_PLANS, billingEnabled: false };
   });
 
   app.get("/portal/api/platform/overview", async (req, reply) => {
@@ -355,6 +362,15 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
     const admin = await adminIdentity(prisma, req, reply);
     if (!admin || !requiredSuperAdmin(admin, reply)) return;
     const body = changePlan.parse(req.body);
+    // Published tiers always use the canonical allowance. A request cannot
+    // silently grant extra groups or linked numbers while keeping a paid code.
+    const tier = paidPlanFor(body.planCode);
+    const assigned = tier ? {
+      ...body,
+      groupLimit: tier.groupLimit,
+      monthlyMessages: tier.monthlyMessages,
+      whatsappConnectionLimit: tier.whatsappConnectionLimit
+    } : body;
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.params.id }, select: { id: true }
     });
@@ -363,15 +379,15 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
       const update = await tx.tenantSubscription.upsert({
         where: { tenantId: tenant.id },
         create: {
-          tenantId: tenant.id, planCode: body.planCode, status: body.status,
-          groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
-          whatsappConnectionLimit: body.whatsappConnectionLimit,
+          tenantId: tenant.id, planCode: assigned.planCode, status: assigned.status,
+          groupLimit: assigned.groupLimit, monthlyMessages: assigned.monthlyMessages,
+          whatsappConnectionLimit: assigned.whatsappConnectionLimit,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         },
         update: {
-          planCode: body.planCode, status: body.status,
-          groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
-          whatsappConnectionLimit: body.whatsappConnectionLimit,
+          planCode: assigned.planCode, status: assigned.status,
+          groupLimit: assigned.groupLimit, monthlyMessages: assigned.monthlyMessages,
+          whatsappConnectionLimit: assigned.whatsappConnectionLimit,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         }
       });
