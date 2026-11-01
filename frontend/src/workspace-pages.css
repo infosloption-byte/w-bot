@@ -35,3 +35,13 @@
 @media(max-width:400px){
  .dashboard .home-stat-grid{grid-template-columns:1fr}
 }
+
+/* Theme-matched account picker: no browser-native select menu */
+.pair-account-list{display:flex;flex-wrap:wrap;gap:9px;min-width:min(100%,280px)}
+.pair-account-option{border:1px solid #36596c;border-radius:12px;display:grid;text-align:left;gap:4px;
+  padding:11px 15px;min-height:52px;min-width:146px;background:#182c40;color:#e9f8fb}
+.pair-account-option strong{font-size:12px}
+.pair-account-option small{color:#8eaebf;font-size:11px}
+.pair-account-option.is-selected{background:#22524d;border-color:#72ecd0;color:#d9fff4}
+.pair-account-option:hover{border-color:#75cabc;background:#243e4c}
+@media(max-width:640px){.pair-account-list{width:100%}.pair-account-option{flex:1}}
