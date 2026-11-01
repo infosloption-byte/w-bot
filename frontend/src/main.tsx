@@ -6,9 +6,16 @@ import { useSidebar } from "./useSidebar.js";
 import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
 import { ByonConnections } from "./ByonConnections.js";
 import { FeatureHub, SmartAlerts } from "./SmartAlerts.js";
+import { CustomerDashboard, TranslationActivity } from "./CustomerDashboard.js";
+import "./theme-refresh.css";
 import "./connections.css";
 
-type View = "overview" | "groups" | "activate" | "connections" | "features" | "alerts" | "settings" | "activity";
+type View = "dashboard" | "translation" | "alerts" | "connections" | "plans" | "settings";
+type TranslationTab = "overview" | "groups" | "activity";
+type AlertTab = "overview" | "groups" | "searches" | "inbox";
+type ConnectionTab = "accounts" | "add" | "pairing";
+type PlanTab = "translation" | "alerts" | "limits";
+type SettingsTab = "profile" | "workspace" | "security";
 type Group = {
   id: string; name: string; whatsappGroupId: string;
   enabled: boolean; gateway: "WEB" | "OFFICIAL";
@@ -55,7 +62,12 @@ function App() {
   const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [maxLanguages, setMaxLanguages] = useState(10);
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>("dashboard");
+  const [translationTab, setTranslationTab] = useState<TranslationTab>("overview");
+  const [alertTab, setAlertTab] = useState<AlertTab>("overview");
+  const [connectionTab, setConnectionTab] = useState<ConnectionTab>("accounts");
+  const [planTab, setPlanTab] = useState<PlanTab>("translation");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -86,7 +98,7 @@ function App() {
     setGroups(managed.groups);
   }, []);
   useEffect(() => {
-    if (!me || (view !== "groups" && view !== "overview")) return;
+    if (!me || (view !== "translation" || (translationTab !== "groups" && translationTab !== "overview"))) return;
     void refreshGroups().catch(() => { /* initial dashboard can still render */ });
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -94,7 +106,7 @@ function App() {
       }
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [me?.workspace.id, view, refreshGroups]);
+  }, [me?.workspace.id, view, translationTab, refreshGroups]);
   async function manualGroupRefresh() {
     setRefreshingGroups(true);
     try { await refreshGroups(); report("Your group list is up to date."); }
@@ -245,15 +257,57 @@ function App() {
   );
 
   const nav: Array<{ id: View; label: string; icon: string }> = [
-    { id: "overview", label: "Overview", icon: "▦" },
-    { id: "groups", label: "My Groups", icon: "☰" },
-    { id: "activate", label: "Add Group", icon: "+" },
-    { id: "connections", label: "WhatsApp Numbers", icon: "♧" },
-    { id: "features", label: "My Features", icon: "⊞" },
-    { id: "alerts", label: "Smart Alerts", icon: "✧" },
-    { id: "settings", label: "Workspace", icon: "⚙" },
-    { id: "activity", label: "Activity & Plan", icon: "◷" }
+    { id: "dashboard", label: "Dashboard", icon: "▦" },
+    { id: "translation", label: "Translation", icon: "文" },
+    { id: "alerts", label: "Smart Alerts", icon: "✳" },
+    { id: "connections", label: "WhatsApp Connections", icon: "♧" },
+    { id: "plans", label: "Plans & Usage", icon: "◷" },
+    { id: "settings", label: "Settings", icon: "⚙" }
   ];
+  const subnav: Partial<Record<View, Array<{ id: string; label: string }>>> = {
+    translation: [
+      { id: "overview", label: "Overview" }, { id: "groups", label: "Groups & Languages" },
+      { id: "activity", label: "Activity" }
+    ],
+    alerts: [
+      { id: "overview", label: "Overview" }, { id: "groups", label: "Monitored Groups" },
+      { id: "searches", label: "Intelligent Searches" }, { id: "inbox", label: "Inbox" }
+    ],
+    connections: [
+      { id: "accounts", label: "Connected Accounts" }, { id: "add", label: "Add Account" },
+      { id: "pairing", label: "Pairing & Reconnection" }
+    ],
+    plans: [
+      { id: "translation", label: "Translation Subscription" },
+      { id: "alerts", label: "Smart Alerts Subscription" },
+      { id: "limits", label: "Limits & Usage" }
+    ],
+    settings: [
+      { id: "profile", label: "Profile" }, { id: "workspace", label: "Workspace" },
+      { id: "security", label: "Security" }
+    ]
+  };
+  function activeSubtab(section: View): string {
+    switch (section) {
+      case "translation": return translationTab;
+      case "alerts": return alertTab;
+      case "connections": return connectionTab;
+      case "plans": return planTab;
+      case "settings": return settingsTab;
+      default: return "";
+    }
+  }
+  function chooseSubtab(section: View, id: string) {
+    setView(section);
+    switch (section) {
+      case "translation": setTranslationTab(id as TranslationTab); break;
+      case "alerts": setAlertTab(id as AlertTab); break;
+      case "connections": setConnectionTab(id as ConnectionTab); break;
+      case "plans": setPlanTab(id as PlanTab); break;
+      case "settings": setSettingsTab(id as SettingsTab); break;
+    }
+    setNotice(""); setError(""); sidebar.closeMobile();
+  }
   return (
     <div className={"dashboard" + (sidebar.collapsed ? " nav-collapsed" : "")}>
       <button type="button" className={"sidebar-scrim" + (sidebar.mobileOpen ? " is-visible" : "")}
@@ -275,13 +329,20 @@ function App() {
         </div>
         <p className="sidebar-label">MENU</p>
         <nav aria-label="Workspace navigation">{nav.map(item =>
-          <button key={item.id} type="button" aria-label={item.label}
+          <React.Fragment key={item.id}><button type="button" aria-label={item.label}
             title={sidebar.collapsed ? item.label : undefined}
             aria-current={view === item.id ? "page" : undefined}
             className={"nav-item " + (view === item.id ? "active" : "")}
             onClick={() => { setView(item.id); setNotice(""); setError(""); sidebar.closeMobile(); }}>
             <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
           </button>
+          {view === item.id && subnav[item.id] && <div className="sidebar-subnav" aria-label={item.label + " pages"}>
+            {subnav[item.id]?.map(sub => <button type="button" key={sub.id}
+              className={activeSubtab(item.id) === sub.id ? "is-active" : ""}
+              aria-current={activeSubtab(item.id) === sub.id ? "page" : undefined}
+              onClick={() => chooseSubtab(item.id, sub.id)}>{sub.label}</button>)}
+          </div>}
+          </React.Fragment>
         )}</nav>
         <div className="sidebar-foot">
           <div className="connection"><span className="live-dot"/> SHARED BOT · PILOT</div>
@@ -303,6 +364,12 @@ function App() {
           <div className="pill pilot">◉ INVITE-ONLY PILOT</div>
         </header>
         <main className="workspace">
+          {view !== "dashboard" && <nav className="workspace-tabs" aria-label="Section pages">
+            {subnav[view]?.map(sub => <button key={sub.id} type="button"
+              className={activeSubtab(view) === sub.id ? "is-active" : ""}
+              aria-current={activeSubtab(view) === sub.id ? "page" : undefined}
+              onClick={() => chooseSubtab(view, sub.id)}>{sub.label}</button>)}
+          </nav>}
           {notice && <div className="alert success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss">×</button></div>}
           {error && <div className="alert error" role="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss">×</button></div>}
 
