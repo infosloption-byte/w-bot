@@ -13,6 +13,8 @@ type Overview = { tenants: number; users: number; groups: number; enabledGroups:
   gateway: { status: string; checkedAt: string | null; changedAt: string | null } };
 type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
   groupLimit: number; monthlyMessages: number; whatsappConnectionLimit: number; periodEnd: string | null };
+type PlanOffer = { code: string; name: string; monthlyUsd: number; yearlyUsd: number;
+  groupLimit: number; whatsappConnectionLimit: number; monthlyMessages: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
   memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null };
 type Group = { id: string; name: string; enabled: boolean; gateway: string;
@@ -66,6 +68,7 @@ function Console() {
   const [users, setUsers] = useState<CustomerUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [catalog, setCatalog] = useState<CatalogLanguage[]>([]);
+  const [planOffers, setPlanOffers] = useState<PlanOffer[]>([]);
   const [newLanguageCode, setNewLanguageCode] = useState("");
   const [newLanguageName, setNewLanguageName] = useState("");
   const [newLanguageEnabled, setNewLanguageEnabled] = useState(true);
@@ -85,17 +88,19 @@ function Console() {
   const [newPassword, setNewPassword] = useState("");
 
   const refresh = useCallback(async () => {
-    const [summary, tenantData, userData, groupData, languageData, failures, actions] = await Promise.all([
+    const [summary, tenantData, userData, groupData, languageData, failures, actions, plansData] = await Promise.all([
       platformApi<Overview>("/overview"),
       platformApi<{ tenants: Tenant[] }>("/tenants"),
       platformApi<{ users: CustomerUser[] }>("/users"),
       platformApi<{ groups: Group[] }>("/groups"),
       platformApi<{ languages: CatalogLanguage[] }>("/languages"),
       platformApi<{ messages: Delivery[] }>("/deliveries"),
-      platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity")
+      platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity"),
+      platformApi<{ plans: PlanOffer[] }>("/plans")
     ]);
     setOverview(summary); setTenants(tenantData.tenants); setUsers(userData.users); setGroups(groupData.groups);
     setCatalog(languageData.languages);
+    setPlanOffers(plansData.plans);
     setDeliveries(failures.messages);
     setActivity(actions.events); setPlatformActivity(actions.platformEvents);
   }, []);
@@ -127,7 +132,7 @@ function Console() {
     try { await platformApi("/auth/logout", { method: "POST", body: "{}" }); }
     catch { /* Clear local state regardless of a network error. */ }
     setAdmin(null); setOverview(null); setTenants([]);
-    setGroups([]); setCatalog([]); setDeliveries([]); setActivity([]);
+    setGroups([]); setCatalog([]); setPlanOffers([]); setDeliveries([]); setActivity([]);
   }
 
   function editPlan(t: Tenant) {
@@ -138,6 +143,16 @@ function Console() {
     setMonthlyMessages(t.subscription?.monthlyMessages ?? 1000);
     setWhatsappConnectionLimit(t.subscription?.whatsappConnectionLimit ?? 0);
     setNotice(""); setError("");
+  }
+
+  function choosePlan(code: string) {
+    setPlanCode(code);
+    const tier = planOffers.find(item => item.code === code);
+    if (tier) {
+      setGroupLimit(tier.groupLimit);
+      setMonthlyMessages(tier.monthlyMessages);
+      setWhatsappConnectionLimit(tier.whatsappConnectionLimit);
+    }
   }
 
   async function savePlan(event: React.FormEvent) {
@@ -337,6 +352,15 @@ function Console() {
           </section>
         </div></>}
         {view === "tenants" && <section className="panel platform-panel">
+          <div className="eyebrow">PUBLISHED SUBSCRIPTION TIERS · USD</div>
+          <div className="subscription-plan-grid platform-plan-grid">{planOffers.map(offer =>
+            <div className="subscription-tier" key={offer.code}>
+              <div className="subscription-tier-head"><strong>{offer.name}</strong></div>
+              <div className="subscription-price">${offer.monthlyUsd}<small>/month</small></div>
+              <p className="muted text-small">${offer.yearlyUsd.toLocaleString()}/year · 2 months free</p>
+              <div className="detail"><span>Numbers / groups</span><strong>{offer.whatsappConnectionLimit} / {offer.groupLimit}</strong></div>
+              <div className="detail"><span>Text translations</span><strong>Unlimited</strong></div>
+            </div>)}</div>
           <div className="platform-toolbar"><h3>Customer workspaces ({tenants.length})</h3>
             <input aria-label="Search customer workspaces" className="platform-search" placeholder="Search customers…" value={search} onChange={e => setSearch(e.target.value)}/></div>
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
@@ -346,7 +370,7 @@ function Console() {
             <td data-label="Owner">{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
             <td data-label="Groups">{t.groupCount}</td>
             <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
-            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} / {t.subscription?.monthlyMessages ?? "—"}</td>
+            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} / {t.subscription ? (t.subscription.monthlyMessages === 0 ? "Unlimited" : t.subscription.monthlyMessages.toLocaleString()) : "—"}</td>
             <td data-label="Action">{admin.role === "SUPER_ADMIN" &&
               <button className="text-button" onClick={() => editPlan(t)}>Manage plan</button>}</td>
           </tr>)}</tbody></table></div>
@@ -472,15 +496,22 @@ function Console() {
         <h2 id="plan-title">Manage {editing.name}</h2>
         <p className="muted">This pilot does not process payments. Changes affect plan enforcement immediately.</p>
         <form className="form" onSubmit={e => void savePlan(e)}>
-          <label>Plan code<input value={planCode} pattern="[A-Z0-9_-]{2,30}" onChange={e => setPlanCode(e.target.value.toUpperCase())}/></label>
+          <div className="platform-label">Published tiers</div>
+          <div className="language-chips">{planOffers.map(offer =>
+            <button key={offer.code} type="button" className={"chip " + (planCode === offer.code ? "selected" : "")}
+              aria-pressed={planCode === offer.code} onClick={() => choosePlan(offer.code)}>
+              {offer.name} · ${offer.monthlyUsd}/mo
+            </button>)}</div>
+          <label>Plan code (PILOT or published tier)<input value={planCode} pattern="[A-Z0-9_-]{2,30}" onChange={e => choosePlan(e.target.value.toUpperCase())}/></label>
+          {planOffers.some(offer => offer.code === planCode) && <p className="muted text-small">Published tier limits are fixed by the server, including unlimited text translations (0 message cap). Billing is not connected.</p>}
           <div className="platform-label">Subscription status</div>
           <div className="language-chips">{(["TRIAL","ACTIVE","PAST_DUE","CANCELED"] as const).map(status =>
             <button type="button" key={status} className={"chip " + (planStatus === status ? "selected" : "")}
               aria-pressed={planStatus === status} onClick={() => setPlanStatus(status)}>{status.replace("_"," ")}</button>)}</div>
-          <label>Maximum groups<input type="number" min={0} max={1000} value={groupLimit} onChange={e => setGroupLimit(Number(e.target.value))}/></label>
-          <label>Monthly messages<input type="number" min={0} max={1000000} value={monthlyMessages} onChange={e => setMonthlyMessages(Number(e.target.value))}/></label>
-           <label>WhatsApp connections (0 = unlimited)<input type="number" min={0} max={1000}
-             value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
+          <label>Maximum groups<input type="number" min={0} max={1000} readOnly={planOffers.some(offer => offer.code === planCode)} value={groupLimit} onChange={e => setGroupLimit(Number(e.target.value))}/></label>
+          <label>Monthly messages (0 = unlimited text)<input type="number" min={0} max={1000000} readOnly={planOffers.some(offer => offer.code === planCode)} value={monthlyMessages} onChange={e => setMonthlyMessages(Number(e.target.value))}/></label>
+           <label>WhatsApp connections (0 = unlimited during pilot)<input type="number" min={0} max={1000}
+             readOnly={planOffers.some(offer => offer.code === planCode)} value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
           <div className="modal-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
             <button className="button primary" disabled={busy} type="submit">Save subscription</button></div>
         </form>
