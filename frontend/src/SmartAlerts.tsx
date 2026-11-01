@@ -187,7 +187,7 @@ export function SmartAlerts() {
     </section>
     <div className="alert-columns">
       <section className="panel">
-        <div className="panel-heading"><h3>Groups to monitor</h3><span className="muted text-small">Read-only</span></div>
+        <div className="panel-heading"><h3>Choose groups to monitor</h3><span className="muted text-small">Read-only</span></div>
         <p className="muted text-small">Choose only groups that you are authorized to monitor. No private chats or historical messages.</p>
         <div className="alert-session-list">
           {connections.map(c => <button key={c.id} type="button"
@@ -204,7 +204,11 @@ export function SmartAlerts() {
           <div className="alert-group-toolbar">
             <span className="muted">{groupsLoading ? "Loading…" : selectedGroups.length + " selected"}</span>
             <button type="button" className="text-button" disabled={!licensed}
-              onClick={() => setSelectedGroups(discovered.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).map(g => g.groupId))}>Select shown</button>
+              onClick={() => setSelectedGroups(discovered
+                .filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())
+                  && !sources.some(source => source.connectionId === connectionId &&
+                    source.whatsappGroupId === g.groupId && source.enabled))
+                .slice(0,50).map(g => g.groupId))}>Select shown</button>
             <button type="button" className="text-button"
               onClick={() => setSelectedGroups([])}>Clear</button>
           </div>
@@ -224,11 +228,11 @@ export function SmartAlerts() {
           </div>
           <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed}
             onChange={e => setConsent(e.target.checked)}/>
-            <span>I confirm I am authorized to monitor these groups and participants have been informed.</span>
+            <span>I have authority to monitor these groups and participants have been informed that selected messages are analyzed by an external AI provider.</span>
           </label>
           <button type="button" className="button primary"
             disabled={!licensed || !selectedGroups.length || !consent || busy}
-            onClick={() => void addGroups()}>Monitor {selectedGroups.length} selected group(s)</button>
+            onClick={() => void addGroups()}>Activate monitoring for {selectedGroups.length} selected group(s)</button>
         </>}
         <div className="alert-items">{sources.map(source=><div className="alert-item" key={source.id}>
           <div><strong>{source.name}</strong><small>{source.enabled?"Monitoring":"Paused"}</small></div>
@@ -244,7 +248,7 @@ export function SmartAlerts() {
         </div>)}</div>
       </section>
       <section className="panel">
-        <div className="panel-heading"><h3>Matching rules</h3><span className="muted text-small">Private searches</span></div>
+        <div className="panel-heading"><h3>Intelligent searches</h3><span className="muted text-small">Private searches</span></div>
         <p className="muted text-small">Create a search with your own labels and values. AI interprets formatted or natural-language messages and checks every requirement.</p>
         <form className="alert-form" onSubmit={e => void createRule(e)}>
           <label className="alert-field">Search name
