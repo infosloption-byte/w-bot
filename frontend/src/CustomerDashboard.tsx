@@ -19,6 +19,7 @@ export function CustomerDashboard(props: {
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState("");
+  const [setupChoice, setSetupChoice] = useState<"translation" | "alerts" | "both">("both");
   useEffect(() => {
     let live = true;
     Promise.all([
@@ -113,6 +114,32 @@ export function CustomerDashboard(props: {
           activeConnections > 0, readyTranslation || readyAlerts,
           props.translationGroups > 0 || (summary?.monitored ?? 0) > 0
         ].filter(Boolean).length} of 3</span></div>
+      <div className="setup-choice">
+        <div className="setup-choice-copy"><strong>What do you want W-Bot to do?</strong>
+          <small>Choose a service to see the next step. You can use both services independently.</small></div>
+        <div className="setup-choice-options" role="group" aria-label="Setup preference">
+          {(["translation","alerts","both"] as const).map(choice => <button type="button" key={choice}
+            aria-pressed={setupChoice === choice}
+            className={setupChoice === choice ? "is-selected" : ""}
+            onClick={() => setSetupChoice(choice)}>
+            {choice === "translation" ? "Translation" : choice === "alerts" ? "Smart Alerts" : "Both services"}
+          </button>)}
+        </div>
+        <div className="setup-choice-action">
+          <span>{setupChoice === "both"
+            ? "One linked account. Two independent subscriptions and group configurations."
+            : setupChoice === "alerts"
+              ? "Privately monitor chosen groups and build intelligent searches."
+              : "Translate approved groups into your chosen languages."}</span>
+          <button type="button" className="button primary" onClick={() => {
+            const chosenReady = setupChoice === "translation" ? readyTranslation :
+              setupChoice === "alerts" ? readyAlerts : readyTranslation && readyAlerts;
+            if (!chosenReady) { props.onNavigate("plans", setupChoice === "alerts" ? "alerts" : "translation"); return; }
+            if (!activeConnections) { props.onNavigate("connections", "accounts"); return; }
+            props.onNavigate(setupChoice === "translation" ? "translation" : "alerts", "groups");
+          }}>Continue setup <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
       <div className="home-checklist-items">
         <button className="home-check-item" onClick={() => props.onNavigate("connections", "accounts")}>
           <span className={"home-check-dot" + (activeConnections ? " is-done" : "")}>{activeConnections ? "✓" : "1"}</span>
