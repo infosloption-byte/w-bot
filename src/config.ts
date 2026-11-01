@@ -31,6 +31,10 @@ const schema = z.object({
   BYON_GATEWAY_URL: z.string().url().default("http://byon-gateway:9039"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  // Isolated Smart Alerts AI processing; opt-in for the pilot.
+  ALERTS_AI_ENABLED: z.enum(["true", "false"]).default("false"),
+  ALERTS_GEMINI_API_KEY: z.string().optional(),
+  ALERTS_GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).optional(),
   GEMINI_MODEL: z.string().regex(/^gemini-[a-zA-Z0-9.-]+$/).default("gemini-3.5-flash-lite"),
   GEMINI_THINKING_LEVEL: z.enum(["minimal", "low", "medium", "high"]).default("minimal"),
   TRANSLATION_PROVIDER: z.enum(["mock", "google", "gemini"]).default("mock"),
@@ -49,6 +53,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   if (cfg.SAAS_REQUIRE_EMAIL_VERIFICATION === "true" &&
     (!cfg.SMTP_HOST || !cfg.SMTP_FROM || !cfg.PORTAL_PUBLIC_URL)) {
     throw new Error("Email verification requires SMTP_HOST, SMTP_FROM and PORTAL_PUBLIC_URL");
+  }
+  if (cfg.ALERTS_AI_ENABLED === "true" &&
+      !(cfg.ALERTS_GEMINI_API_KEY?.trim() || cfg.GEMINI_API_KEY?.trim())) {
+    throw new Error("ALERTS_AI_ENABLED requires ALERTS_GEMINI_API_KEY or GEMINI_API_KEY");
   }
   if (cfg.TRANSLATION_PROVIDER === "google" && !cfg.GOOGLE_TRANSLATE_API_KEY) {
     throw new Error("GOOGLE_TRANSLATE_API_KEY required for google provider");
