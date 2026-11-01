@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { portalRequest } from "./PortalAccount.js";
+import { AlertPicker } from "./AlertPicker.js";
 import "./alerts-inbox.css";
 
 type Connection = {id:string;label:string;active:boolean;status:string};
@@ -84,17 +85,17 @@ export function AlertNotificationSettings() {
     {error && <div className="alert error" role="alert">{error}</div>}
     {message && <div className="alert success" role="status">{message}</div>}
     <form className="alert-notification-form" onSubmit={e=>void save(e)}>
-      <label className="alert-field">Connected WhatsApp account
-        <select value={connectionId} onChange={e=>{setConnectionId(e.target.value);setGroupId("");setConsent(false);}}>
-          <option value="">Select an account</option>
-          {connections.map(c=><option value={c.id} key={c.id}>{c.label}</option>)}
-        </select></label>
-      <label className="alert-field">Dedicated alerts group
-        <select disabled={!connectionId||loadingGroups} value={groupId}
-          onChange={e=>{setGroupId(e.target.value);setConsent(false);}}>
-          <option value="">{loadingGroups?"Loading groups…":"Select your notifications group"}</option>
-          {groups.map(g=><option key={g.groupId} value={g.groupId}>{g.name}</option>)}
-        </select></label>
+      <div className="alert-field"><span>Connected WhatsApp account</span>
+        <AlertPicker ariaLabel="Connected WhatsApp account" value={connectionId}
+          onChange={v=>{setConnectionId(v);setGroupId("");setConsent(false);}}
+          options={[{value:"",label:"Select an account"},...connections.map(c=>({value:c.id,label:c.label}))]}/>
+      </div>
+      <div className="alert-field"><span>Dedicated alerts group</span>
+        <AlertPicker ariaLabel="Dedicated alerts group" disabled={!connectionId||loadingGroups}
+          value={groupId} onChange={v=>{setGroupId(v);setConsent(false);}}
+          options={[{value:"",label:loadingGroups?"Loading groups…":"Select your notifications group"},
+            ...groups.map(g=>({value:g.groupId,label:g.name}))]}/>
+      </div>
       <label className="consent-row">
         <input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>
         <span>I administer this group and confirm all participants agree to receive automated alerts,
