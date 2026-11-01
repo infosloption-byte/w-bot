@@ -373,8 +373,14 @@ function App() {
           {notice && <div className="alert success" role="status">{notice}<button onClick={() => setNotice("")} aria-label="Dismiss">×</button></div>}
           {error && <div className="alert error" role="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss">×</button></div>}
 
-          {view === "overview" && <>
-            <div className="page-heading"><div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>Good to see you, {me.user.name.split(" ")[0]}.</h1><p className="muted">Your enabled WhatsApp services at a glance.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add WhatsApp group</button></div>
+          {view === "dashboard" && <CustomerDashboard
+            customerName={me.user.name} workspaceName={me.workspace.name}
+            translationGroups={groups.length} translations={usage?.messages ?? 0}
+            onNavigate={(target, tab) => chooseSubtab(target, tab ||
+              (target === "translation" || target === "alerts" ? "overview" :
+                target === "connections" ? "accounts" : "translation"))}/>}
+          {view === "translation" && translationTab === "overview" && <>
+            <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Manage translated conversations and languages for your approved groups.</p></div><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage connections</button></div>
             <div className="metrics">
               <div className="metric"><div className="metric-label">REGISTERED GROUPS <span>▦</span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
               <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
@@ -384,7 +390,7 @@ function App() {
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => setView("groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
                   <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
-                ) : <div className="empty">No groups yet. Use <button className="text-button" onClick={() => setView("activate")}>Add Group</button> to start.</div>}
+                ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp Connections</button> to begin.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
                 {usage?.recent.length ? usage.recent.map(item =>
@@ -394,9 +400,9 @@ function App() {
             </div>
           </>}
 
-          {view === "groups" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">All activated groups appear here, whether they use the shared bot or your own number. New activations refresh automatically.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}>{refreshingGroups ? "Refreshing…" : "↻ Refresh groups"}</button><button className="button primary" onClick={() => setView("connections")}>WhatsApp numbers</button></div></div>
-            {!groups.length && <div className="panel empty large">No groups connected yet. Activate one with the shared bot or your own WhatsApp number.<p><button className="button primary" onClick={() => setView("connections")}>Manage WhatsApp numbers</button></p></div>}
+          {view === "translation" && translationTab === "groups" && <>
+            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Manage translation languages and approved groups connected to your WhatsApp sessions.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}>{refreshingGroups ? "Refreshing…" : "↻ Refresh groups"}</button><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp accounts</button></div></div>
+            {!groups.length && <div className="panel empty large">No translation groups activated yet. Link your WhatsApp account and request group activation.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage WhatsApp accounts</button></p></div>}
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
                 <div className="group-title"><div className="group-icon">♧</div><div className="grow"><h3>{group.name}</h3><small>{group.connection
@@ -433,58 +439,40 @@ function App() {
             )}</div>
           </>}
 
-          {view === "activate" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP ONBOARDING</div><h1>Connect a WhatsApp group</h1><p className="muted">Invite our shared W-Bot number to a group you administer. No customer device pairing is required.</p></div></div>
-            <div className="activation-layout">
-              <div className="panel steps">
-                <div className="step"><span className="step-number">01</span><div><h3>Add the W-Bot number</h3><p>In WhatsApp, open the group and add the W-Bot WhatsApp Business account as a participant.</p>{me.botPhoneNumber ? <button className="copy-box" onClick={() => void copyText(me.botPhoneNumber!)}>{me.botPhoneNumber} <span>Copy</span></button> : <p className="hint">The W-Bot phone number will be provided by your administrator.</p>}</div></div>
-                <div className="step"><span className="step-number">02</span><div><h3>Generate an activation code</h3><p>Create a one-time code valid for 15 minutes. The code belongs to your workspace.</p>
-                  <label className="consent-row"><input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />
-                    <span>I am authorized to manage this group, and its participants have been informed that messages are processed by W-Bot and an external AI translation service.</span>
-                  </label>
-                  <button className="button secondary" disabled={busy || !consent || groups.length >= me.limits.groups} onClick={() => void createActivation()}>{busy ? "Generating…" : "Generate activation code"}</button>
-                  {activation && <div className="activation-result">
-                    <div className="section-label">TEMPORARY GROUP ADMIN COMMAND</div>
-                    <div className="activation-code"><code>/wbot connect {activation.code}</code><button onClick={() => void copyText("/wbot connect " + activation.code)}>Copy</button></div>
-                    <small>Expires {new Date(activation.expiresAt).toLocaleTimeString()}. A group admin may send this full command or just the 16-character code in the WhatsApp group. Do not share the code outside the group.</small>
-                  </div>}
-                </div></div>
-                <div className="step"><span className="step-number">03</span><div><h3>Verify ownership inside WhatsApp</h3><p>A verified group admin posts the activation command in the WhatsApp group. W-Bot verifies their role and connects the group to your workspace.</p><p className="hint">Activation codes only work in groups where the shared W-Bot account is a participant.</p></div></div>
-                <div className="step"><span className="step-number">04</span><div><h3>Manage translation</h3><p>Once connected, control languages and pause or resume translation from My Groups.</p><button className="text-button" onClick={() => { void refresh().catch(reportError); setView("groups"); }}>Refresh my groups →</button></div></div>
-              </div>
-              <aside className="panel help-card"><div className="help-icon">◎</div><h3>Designed for privacy</h3><p>Group members must be informed that W-Bot sends messages to an external translation service and retains records for the pilot.</p><div className="help-separator"/><h4>One group, one workspace</h4><p>A group cannot be activated by two different customer workspaces. A verified admin must approve each connection.</p><div className="help-separator"/><p className="muted text-small">This is an invitation-only pilot running on an unofficial WhatsApp Web connector. Connection and account restrictions remain possible.</p></aside>
-            </div>
-          </>}
-
-          {view === "features" && <>
-             <div className="page-heading"><div><div className="eyebrow">INDEPENDENT FEATURE SUBSCRIPTIONS</div><h1>My features</h1>
-               <p className="muted">Translate and Smart Alerts have separate activation and paid entitlements, with one workspace login.</p></div></div>
-             <FeatureHub onOpenAlerts={() => setView("alerts")}/>
-           </>}
            {view === "alerts" && <>
              <div className="page-heading"><div><div className="eyebrow">PRIVATE GROUP MONITORING</div><h1>Smart Alerts</h1>
-               <p className="muted">Find matching new messages in selected groups. The translation pipeline is unaffected.</p></div></div>
-             <SmartAlerts/>
+               <p className="muted">Manage monitoring, AI-powered searches and your private matches inbox.</p></div></div>
+             <SmartAlerts section={alertTab}/>
            </>}
            {view === "settings" && <>
-            <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Workspace settings</h1><p className="muted">Your account and shared bot configuration.</p></div></div>
-            <AccountSettings me={me} onRefresh={refresh} onLogout={logout}/>
+            <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Account settings</h1><p className="muted">Manage profile, workspace and security settings.</p></div></div>
+            <AccountSettings section={settingsTab} me={me} onRefresh={refresh} onLogout={logout}/>
           </>}
           {view === "connections" && <>
             <div className="page-heading"><div>
               <div className="eyebrow">WHATSAPP CONNECTIONS</div>
-              <h1>Your WhatsApp numbers</h1>
-              <p className="muted">Use the shared W-Bot or link an account you own. Each connection is isolated.</p>
+              <h1>WhatsApp Connections</h1>
+              <p className="muted">Link a WhatsApp account once and manage its connections for the services you subscribe to.</p>
             </div></div>
-            <ByonConnections onManageGroups={() => {
-              setView("groups"); void refreshGroups().catch(reportError);
-            }}/>
+            <ByonConnections mode={connectionTab}
+              onNavigate={tab => chooseSubtab("connections", tab)}
+              onManageGroups={() => {
+                chooseSubtab("translation","groups"); void refreshGroups().catch(reportError);
+              }}/>
           </>}
-          {view === "activity" && <>
-            <div className="page-heading"><div><div className="eyebrow">ACTIVITY & LIMITS</div><h1>Activity & subscription</h1><p className="muted">Group activation history, security changes and shared bot connectivity.</p></div></div>
-            <WorkspaceActivity/>
+          {view === "translation" && translationTab === "activity" && <>
+            <div className="page-heading"><div><div className="eyebrow">TRANSLATION</div>
+              <h1>Recent activity</h1><p className="muted">Track translation activity for connected groups.</p></div></div>
+            <TranslationActivity/>
           </>}
-        </main>
+          {view === "plans" && <>
+            <div className="page-heading"><div><div className="eyebrow">SERVICE SUBSCRIPTIONS</div>
+              <h1>Plans & Usage</h1><p className="muted">Manage independent feature access and subscription limits.</p></div></div>
+            <FeatureHub onOpenAlerts={() => chooseSubtab("alerts","overview")}/>
+            {(planTab === "translation" || planTab === "limits") && <WorkspaceActivity/>}
+            {(planTab === "alerts" || planTab === "limits") && <SmartAlerts section="overview"/>}
+          </>}
+       </main>
         {pendingHistoryDelete && <div className="modal-backdrop" role="presentation">
           <div className="modal-panel" role="alertdialog" aria-modal="true" aria-labelledby="history-title" aria-describedby="history-description">
             <div className="eyebrow">DATA PRIVACY</div>
