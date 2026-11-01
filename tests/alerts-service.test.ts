@@ -34,6 +34,31 @@ test("watched messages use WatchEvent and cannot enter translation queue", async
   assert.deepEqual((captured as { data: Array<{ tenantId: string }> }).data[0]?.tenantId, "tenant-A");
 });
 
+test("verified message sender is stored independently from message body", async () => {
+  let stored: { data: Array<{ senderPhone?: string | null }> } | undefined;
+  const db = {
+    watchGroup: { findFirst: async () => ({
+      id: "watch-group", tenantId: "tenant-A", connection: { kind: "PERSONAL" }
+    }) },
+    whatsAppConnectionPolicy: { findUnique: async () => ({
+      customerNumbersEnabled: true, personalEnabled: true, businessEnabled: true
+    }) },
+    alertSubscription: { findUnique: async () => ({
+      enabled: true, status: "ACTIVE", periodEnd: null
+    }) },
+    watchEvent: { createMany: async (args: typeof stored) => {
+      stored = args; return { count: 1 };
+    } }
+  };
+  assert.equal(await ingestWatchedMessage(db as never,cfg,{
+    ...details, senderPhone: "+94771112233",
+    text: "Booking contact: 0771234567"
+  }), true);
+  assert.equal(stored?.data[0]?.senderPhone, "+94771112233");
+  assert.equal(await ingestWatchedMessage(db as never,cfg,details), true);
+  assert.equal(stored?.data[0]?.senderPhone, null);
+});
+
 test("alerts are denied when their separate subscription is not active", async () => {
   let stored = false;
   const db = {

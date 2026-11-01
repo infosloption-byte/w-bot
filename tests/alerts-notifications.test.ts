@@ -59,6 +59,26 @@ test("notification contains source-grounded context without exposing message IDs
   assert.match(text,/0771234567/);
   assert.ok(text.length<1600);
 });
+test("outbound alert shows sender and contact as separate verified facts", () => {
+  const text = formatAlertNotification({
+    ruleName: "Tours to Galle", groupName: "Test group",
+    summary: "Tour requested. Contact in message: 0771234567",
+    senderPhone: "+94771112233", contactNumber: "0771234567",
+    createdAt: new Date("2026-11-01T08:21:38Z")
+  });
+  assert.match(text, /Message sender \(WhatsApp\): \+94771112233/);
+  assert.match(text, /Contact shared in the source: 0771234567/);
+  assert.ok(text.indexOf("Message sender") < text.indexOf("Contact shared"));
+});
+test("unverified or LID-only identity is never printed as a phone", () => {
+  const text = formatAlertNotification({
+    ruleName: "Search", groupName: "Test group", summary: "Matching message",
+    senderPhone: "123456789@lid", contactNumber: null,
+    createdAt: new Date("2026-11-01T08:21:38Z")
+  });
+  assert.match(text, /Message sender \(WhatsApp\): Number unavailable/);
+  assert.doesNotMatch(text, /123456789@lid/);
+});
 test("a configured destination sends one alert and never calls translation", async () => {
   const {mock,updates}=makeDb();let calls=0;
   const sender = async (_cfg:unknown,path:string,method:string,data?:unknown)=>{

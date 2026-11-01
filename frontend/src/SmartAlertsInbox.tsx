@@ -8,7 +8,7 @@ type ListMatch = {
   isRead: boolean; createdAt: string;
   rule: { id: string; name: string };
   event: { externalMessageId: string; watchGroupId: string; createdAt: string;
-    group: { name: string } };
+    senderPhone: string | null; group: { name: string } };
   delivery: { status: string; sentAt: string | null } | null;
 };
 type Detail = ListMatch & {
@@ -16,7 +16,7 @@ type Detail = ListMatch & {
   rule: { id: string; name: string; parameters: unknown };
   delivery: {status:string;sentAt:string|null;attempts:number}|null;
   event: { externalMessageId:string; createdAt:string; processedAt:string|null;
-    group:{name:string} };
+    senderPhone:string|null; group:{name:string} };
 };
 type Group = {id:string;name:string};
 type Rule = {id:string;name:string};
@@ -128,7 +128,8 @@ export function SmartAlertsInbox() {
           <p>{item.summary}</p>
           <div className="alert-inbox-item-meta">
             <span>{item.event.group.name}</span>
-            {item.contactNumber && <span>Contact available</span>}
+            <span>Message sender: {item.event.senderPhone ?? "Number unavailable"}</span>
+            {item.contactNumber && <span>Contact in message: {item.contactNumber}</span>}
             {item.delivery && <span>WhatsApp: {item.delivery.status.toLowerCase()}</span>}
           </div>
         </div>
@@ -158,6 +159,8 @@ export function SmartAlertsInbox() {
         {detail && <>
           <div className="alert-detail-grid">
             <div><small>Source group</small><strong>{detail.event.group.name}</strong></div>
+            <div><small>Original sender (WhatsApp)</small>
+              <strong>{detail.event.senderPhone ?? "Number unavailable"}</strong></div>
             <div><small>Received</small><strong>{new Date(detail.event.createdAt).toLocaleString()}</strong></div>
             <div><small>Matched</small><strong>{new Date(detail.createdAt).toLocaleString()}</strong></div>
             <div><small>Read status</small><strong>{detail.isRead?"Read":"Unread"}</strong></div>
@@ -171,8 +174,15 @@ export function SmartAlertsInbox() {
           {requirements.length ? <dl className="alert-criteria-list">{requirements.map((x,i)=>
             <div key={i}><dt>{x.label}</dt><dd>{String(x.value)}</dd></div>)}</dl>:
             <p className="muted">Older alert: historical search conditions are unavailable.</p>}
+          {detail.event.senderPhone && <div className="alert-contact">
+            <span><small>Original sender's WhatsApp number</small><strong>{detail.event.senderPhone}</strong></span>
+            <button className="button secondary" onClick={()=>{
+              void navigator.clipboard.writeText(detail.event.senderPhone || "")
+                .catch(()=>setError("Copy sender number failed"));
+            }}>Copy sender number</button>
+          </div>}
           {detail.contactNumber && <div className="alert-contact">
-            <span><small>Contact from source message</small><strong>{detail.contactNumber}</strong></span>
+            <span><small>Contact mentioned inside the message</small><strong>{detail.contactNumber}</strong></span>
             <button className="button secondary" onClick={()=>{
               void navigator.clipboard.writeText(detail.contactNumber||"")
                 .catch(()=>setError("Copy contact failed"));

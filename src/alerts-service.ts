@@ -6,7 +6,8 @@ import type { Config } from "./config.js";
 import { connectionTypeAllowed } from "./byon-shared.js";
 
 export async function ingestWatchedMessage(prisma: PrismaClient, cfg: Config, details: {
-  connectionId: string; groupId: string; messageId: string; text: string
+  connectionId: string; groupId: string; messageId: string; text: string;
+  senderPhone?: string | null
 }): Promise<boolean> {
   if (cfg.BYON_GATEWAY_ENABLED !== "true" || !details.text.trim() ||
       details.text.length > 1000) return false;
@@ -25,7 +26,8 @@ export async function ingestWatchedMessage(prisma: PrismaClient, cfg: Config, de
   const result = await prisma.watchEvent.createMany({
     data: [{
       tenantId: group.tenantId, watchGroupId: group.id,
-      externalMessageId: details.messageId, content: details.text
+      externalMessageId: details.messageId, content: details.text,
+      senderPhone: details.senderPhone ?? null
     }], skipDuplicates: true
   });
   return result.count === 1;

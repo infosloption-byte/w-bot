@@ -349,7 +349,7 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
         rule: { select: { id: true, name: true } },
         delivery: { select: { status: true, sentAt: true } },
         event: { select: { externalMessageId: true, watchGroupId: true,
-          createdAt: true, group: { select: { name: true } } } } }
+          senderPhone: true, createdAt: true, group: { select: { name: true } } } } }
     });
     return { matches: matches.slice(0,50), hasMore: matches.length > 50, page: query.page };
   });
@@ -365,7 +365,7 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
         rule: { select: { id: true, name: true, parameters: true } },
         delivery: { select: { status: true, sentAt: true, attempts: true } },
         event: { select: {
-          externalMessageId: true, createdAt: true, processedAt: true,
+          externalMessageId: true, senderPhone: true, createdAt: true, processedAt: true,
           group: { select: { name: true } }
         } }
       }

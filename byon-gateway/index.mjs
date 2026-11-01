@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { mkdir, rm } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 import { extractByonLiveMessage } from "./message-routing.mjs";
+import { resolveSenderPhone } from "./sender-phone.mjs";
 import { isGroupJid, extractLiveMessage, buildQuotedMessage, isVerifiedGroupAdmin,
   senderJidCandidates, parseActivationCommand } from "./validation.mjs";
 
@@ -254,10 +255,28 @@ async function connect(id, phoneNumber) {
         if (code) {
           void activation(entry, msg, incoming, code);
         } else {
-          void post("/internal/byon/message", { connectionId: id, ...incoming })
-            .then(accepted => {
-              if (msg?.key?.fromMe) console.info("BYON own group ingress", { accepted });
+          // Sender identity belongs to the authenticated WhatsApp event, not
+          // a contact number that someone typed in the message. A privacy LID
+          // cannot be displayed as a phone unless metadata resolves its PN.
+          void (async () => {
+            let senderPhone = null;
+            try {
+              senderPhone = await resolveSenderPhone(msg, ws.user?.id, groupId =>
+                new Promise((resolve, reject) => {
+                  const timeout = setTimeout(() => reject(Error("Metadata timeout")), 1500);
+                  timeout.unref();
+                  Promise.resolve(ws.groupMetadata(groupId)).then(
+                    value => { clearTimeout(timeout); resolve(value); },
+                    error => { clearTimeout(timeout); reject(error); }
+                  );
+                }));
+            } catch { /* Phone is optional; do not drop the message. */ }
+            const accepted = await post("/internal/byon/message", {
+              connectionId: id, ...incoming,
+              ...(senderPhone ? { senderPhone } : {})
             });
+            if (msg?.key?.fromMe) console.info("BYON own group ingress", { accepted });
+          })();
         }
       }
     });

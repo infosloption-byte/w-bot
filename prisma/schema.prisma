@@ -377,6 +377,8 @@ model WatchEvent {
   watchGroupId      String @db.VarChar(191)
   group             WatchGroup @relation(fields: [watchGroupId], references: [id], onDelete: Cascade)
   externalMessageId String @db.VarChar(191)
+  // Verified sender PN only; LID identifiers are never persisted as phone numbers.
+  senderPhone       String? @db.VarChar(16)
   content           String? @db.Text
   status            WatchEventStatus @default(PENDING)
   attempts          Int @default(0)
