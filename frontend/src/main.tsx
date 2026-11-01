@@ -72,10 +72,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [activation, setActivation] = useState<{ code: string; expiresAt: string } | null>(null);
   const [loginMode, setLoginMode] = useState<"login" | "signup" | "forgot">("login");
   const [openTokenView, setOpenTokenView] = useState(Boolean(new URLSearchParams(window.location.search).get("token")));
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingDisconnect, setPendingDisconnect] = useState<Group | null>(null);
   const [pendingHistoryDelete, setPendingHistoryDelete] = useState<Group | null>(null);
@@ -152,19 +150,7 @@ function App() {
   async function logout() {
     try { await api("/auth/logout", { method: "POST", body: "{}" }); }
     catch { /* clear local app state regardless */ }
-    setMe(null); setGroups([]); setUsage(null); setActivation(null); setLanguages([]);
-  }
-
-  async function createActivation() {
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const result = await api<{ code: string; expiresAt: string }>("/activations", {
-        method: "POST", body: JSON.stringify({ consentConfirmed: consent })
-      });
-      setActivation(result);
-      report("Activation code created. Ask a group administrator to post it in the group.");
-    } catch (err) { reportError(err); }
-    finally { setBusy(false); }
+    setMe(null); setGroups([]); setUsage(null); setLanguages([]);
   }
 
   async function updateGroup(group: Group, changes: { enabled?: boolean; targetLanguages?: string[] }) {
@@ -201,11 +187,6 @@ function App() {
       report(result.deleted + " stored message records deleted for this group.");
     } catch (err) { reportError(err); }
     finally { setBusy(false); }
-  }
-
-  async function copyText(value: string) {
-    try { await navigator.clipboard.writeText(value); report("Copied to clipboard"); }
-    catch { reportError(new Error("Unable to copy. Select and copy the command manually.")); }
   }
 
   if (loading) return (
@@ -346,7 +327,7 @@ function App() {
           </React.Fragment>
         )}</nav>
         <div className="sidebar-foot">
-          <div className="connection"><span className="live-dot"/> SHARED BOT · PILOT</div>
+          <div className="connection"><span className="live-dot"/> WHATSAPP WORKSPACE</div>
           <div className="profile"><div className="avatar">{me.user.name[0]?.toUpperCase()}</div><div className="profile-meta"><strong>{me.user.name}</strong><small>{me.workspace.name}</small></div></div>
           <button type="button" aria-label="Sign out" title={sidebar.collapsed ? "Sign out" : undefined}
             onClick={() => { sidebar.closeMobile(); void logout(); }} className="nav-item signout">
