@@ -55,7 +55,9 @@ export function selectTrustedMatches(message: string, rules: SemanticRule[], raw
     ));
     if (!proven) continue;
     result.set(rule.id, {
-      summary: (candidate.summary.trim() || message.trim()).slice(0, 500),
+      // Display only original message text. A model-written summary could
+      // introduce claims that were not actually sent by a group member.
+      summary: message.replace(/\s+/g, " ").trim().slice(0, 500),
       // Only accept a literal phone number, never a model-generated one.
       contactNumber: extractContactNumber(message),
       quotedPrice: null
