@@ -67,7 +67,12 @@ export function FeatureHub(props: { onOpenAlerts: () => void }) {
   </div>;
 }
 
-export function SmartAlerts() {
+export function SmartAlerts({
+  section = "overview", onNavigate
+}: {
+  section?: "overview" | "groups" | "searches" | "inbox";
+  onNavigate?: (section: "overview" | "groups" | "searches" | "inbox") => void;
+}) {
   const [features, setFeatures] = useState<Features | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -160,7 +165,7 @@ export function SmartAlerts() {
   return <div className="smart-alerts">
     {error && <div className="alert error" role="alert">{error}<button aria-label="Dismiss" onClick={()=>setError("")}>×</button></div>}
     {success && <div className="alert success" role="status">{success}<button aria-label="Dismiss" onClick={()=>setSuccess("")}>×</button></div>}
-    <section className="panel">
+    {section === "overview" && <section className="panel">
       <div className="panel-heading"><h3>Subscription & usage</h3>
         <button className="text-button" onClick={()=>void refresh().catch(()=>setError("Refresh failed"))}>Refresh</button></div>
       <p className="muted">Smart Alerts is a separate paid feature. Your WhatsApp connection and account remain shared.</p>
@@ -184,9 +189,9 @@ export function SmartAlerts() {
       {!features?.alerts.active && <p className="muted text-small">
         A separate Smart Alerts subscription is required. No charges or checkout are available in this pilot.
       </p>}
-    </section>
-    <div className="alert-columns">
-      <section className="panel">
+    </section>}
+    {(section === "groups" || section === "searches") && <div className="alert-columns alert-page-grid">
+      {section === "groups" && <section className="panel">
         <div className="panel-heading"><h3>Choose groups to monitor</h3><span className="muted text-small">Read-only</span></div>
         <p className="muted text-small">Choose only groups that you are authorized to monitor. No private chats or historical messages.</p>
         <div className="alert-session-list">
@@ -246,8 +251,8 @@ export function SmartAlerts() {
             }}>Remove</button>
           </div>
         </div>)}</div>
-      </section>
-      <section className="panel">
+      </section>}
+      {section === "searches" && <section className="panel">
         <div className="panel-heading"><h3>Intelligent searches</h3><span className="muted text-small">Private searches</span></div>
         <p className="muted text-small">Create a search with your own labels and values. AI interprets formatted or natural-language messages and checks every requirement.</p>
         <form className="alert-form" onSubmit={e => void createRule(e)}>
@@ -296,9 +301,9 @@ export function SmartAlerts() {
             }}>Delete</button>
           </div>
         </div>)}</div>
-      </section>
-    </div>
-    <section className="panel">
+      </section>}
+    </div>}
+    {section === "inbox" && <section className="panel">
       <div className="panel-heading"><h3>Private alerts inbox</h3><span className="muted text-small">Recent matches · in-app only</span></div>
       <p className="muted text-small">Matches are visible only to signed-in workspace members. Monitoring never posts or replies inside the WhatsApp group.</p>
       {matches.length ? <div className="alert-inbox">{matches.map(item=><article className={"alert-match "+(item.isRead?"is-read":"")} key={item.id}>
@@ -314,7 +319,30 @@ export function SmartAlerts() {
           ()=>portalRequest("/alerts/inbox/"+encodeURIComponent(item.id),{isRead:true},"PATCH"),
           "Alert marked as read.")}>Mark read</button>}
       </article>)}</div> : <p className="muted">No matching messages yet. Add a monitored group and rule to begin.</p>}
-    </section>
+    </section>}
+    {section === "overview" && <section className="home-service-grid">
+      <article className="home-service-card"><div className="eyebrow">STEP 1</div>
+        <h3>Monitored WhatsApp groups</h3>
+        <p>Choose which authorized groups Smart Alerts should analyze. Each group can be paused independently.</p>
+        <button className="button secondary" onClick={() => onNavigate?.("groups")}>
+          Manage {usage?.groups ?? 0} groups <span aria-hidden="true">→</span>
+        </button>
+      </article>
+      <article className="home-service-card"><div className="eyebrow">STEP 2</div>
+        <h3>Intelligent searches</h3>
+        <p>Describe what matters to you using flexible labels and values, for any industry.</p>
+        <button className="button secondary" onClick={() => onNavigate?.("searches")}>
+          Manage {usage?.rules ?? 0} searches <span aria-hidden="true">→</span>
+        </button>
+      </article>
+      <article className="home-service-card"><div className="eyebrow">STEP 3</div>
+        <h3>Review your matches</h3>
+        <p>Read matching opportunities privately. Smart Alerts never replies in monitored groups.</p>
+        <button className="button secondary" onClick={() => onNavigate?.("inbox")}>
+          Open inbox <span aria-hidden="true">→</span>
+        </button>
+      </article>
+    </section>}
     <p className="muted text-small">The Gemini-based semantic matcher is independently enabled by the administrator; AI results should always be checked against the original group message. External notification delivery is not yet available. WhatsApp linked-device monitoring is unofficial and may be restricted.</p>
   </div>;
 }
