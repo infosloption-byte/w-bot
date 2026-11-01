@@ -203,6 +203,10 @@ export function ByonConnections({
         </div>;
       })}
     </div>
+    {mode === "add" && !canCreate && <div className="byon-notice" role="status">
+      Your WhatsApp connection allowance is unavailable or full. Review Plans & Usage
+      or contact your workspace administrator before adding another account.
+    </div>}
     <div className="byon-layout">
       <section className={"panel byon-numbers-panel" + (mode === "pairing" ? " is-hidden" : "")} aria-label="Your WhatsApp connections">
         <div className="byon-panel-heading">
