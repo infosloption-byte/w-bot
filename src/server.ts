@@ -3,15 +3,22 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "./db.js";
 import { loadConfig } from "./config.js";
-import { DEFAULT_TARGET_LANGUAGES, LANGUAGE_NAMES, isLanguage, normalizeLanguageCode } from "./languages.js";
+import { MAX_GROUP_LANGUAGES, normalizeLanguageCode, loadEnabledLanguages, defaultGroupLanguages, validateTargetLanguages } from "./languages.js";
 import { createTranslationProvider } from "./translation.js";
 import { extractGroupMessages, verifySignature } from "./whatsapp.js";
 import { processPending } from "./processor.js";
 import { isWebGroupId, type GatewayKind } from "./gateways.js";
+import { registerPortalRoutes } from "./portal.js";
+import { registerPlatformRoutes } from "./platform.js";
+import { ingestTenantMessage } from "./quotas.js";
+import { runRetention } from "./retention.js";
+import { checkGatewayHealth } from "./gateway-health.js";
 
 const cfg = loadConfig();
 const app = Fastify({ logger: { redact: ["req.headers.authorization", "req.headers.x-hub-signature-256"] }, bodyLimit: 256 * 1024 });
 const provider = createTranslationProvider(cfg);
+registerPortalRoutes(app, prisma, cfg);
+registerPlatformRoutes(app, prisma, cfg);
 
 function safeToken(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -19,16 +26,15 @@ function safeToken(given: string | undefined, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const targets = z.array(
-  z.string().transform(normalizeLanguageCode).refine(isLanguage, "Unsupported language")
-).min(1).max(DEFAULT_TARGET_LANGUAGES.length)
+const targets = z.array(z.string().transform(normalizeLanguageCode))
+  .min(1).max(MAX_GROUP_LANGUAGES)
   .refine(v => new Set(v).size === v.length, "Duplicate language");
 const groupSchema = z.object({
   groupId: z.string().min(1).max(191),
   name: z.string().trim().min(1).max(191),
   enabled: z.boolean().default(true),
   gateway: z.enum(["official", "web"]).default("official"),
-  targetLanguages: targets.default([...DEFAULT_TARGET_LANGUAGES])
+  targetLanguages: targets.optional()
 }).strict();
 const editGroupSchema = z.object({
   name: z.string().trim().min(1).max(191).optional(),
@@ -90,6 +96,13 @@ async function enqueue(groupId: string, messageId: string, senderId: string, tex
   if (await prisma.message.findFirst({ where: { outboundMessageId: messageId }, select: { id: true } })) return false;
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: groupId } });
   if (!group || !group.enabled || group.gateway !== gateway) return false; // fail closed: channel-locked allowlist
+  if (group.tenantId) {
+    if (!group.consentAt) return false;
+    return ingestTenantMessage(prisma, cfg, {
+      tenantId: group.tenantId, groupId: group.id,
+      messageId, senderId, text
+    });
+  }
   const saved = await prisma.message.createMany({
     data: [{ groupId: group.id, externalMessageId: messageId, senderId, originalText: text }],
     skipDuplicates: true
@@ -172,10 +185,99 @@ app.get("/api/web/groups", async (_request, reply) => {
   }
 });
 
-app.get("/api/languages", async () => ({
-  languages: DEFAULT_TARGET_LANGUAGES.map(code => ({ code, name: LANGUAGE_NAMES[code] })),
-  defaultTargetLanguages: [...DEFAULT_TARGET_LANGUAGES]
+const reconcileSchema = z.object({
+  action: z.enum(["mark_delivered", "retry"])
+}).strict();
+
+// Delivery-uncertain events are *never* automatically resent. An operator must
+// inspect WhatsApp delivery history before choosing to retry (possible duplicate).
+app.post<{ Params: { id: string } }>("/api/messages/:id/reconcile",
+  async (request, reply) => {
+    const input = reconcileSchema.parse(request.body);
+    const msg = await prisma.message.findUnique({
+      where: { id: request.params.id }, include: { group: true }
+    });
+    if (!msg || !["DELIVERY_UNCERTAIN", "FAILED"].includes(msg.status)) {
+      return reply.code(404).send({ error: "Message not available for reconciliation" });
+    }
+    const updated = await prisma.message.updateMany({
+      where: { id: msg.id, status: { in: ["DELIVERY_UNCERTAIN", "FAILED"] } },
+      data: input.action === "retry"
+        ? {
+            status: "PENDING", sendStartedAt: null,
+            nextAttemptAt: new Date(), lastError: "Manual retry approved by operator"
+          }
+        : {
+            status: "COMPLETED", sendStartedAt: null,
+            processedAt: new Date(), lastError: "Operator confirmed delivery"
+          }
+    });
+    if (!updated.count) return reply.code(409).send({ error: "Message state changed" });
+    if (msg.group.tenantId) await prisma.tenantAudit.create({
+      data: {
+        tenantId: msg.group.tenantId, groupId: msg.groupId,
+        action: input.action === "retry" ? "DELIVERY_RETRY_BY_OPERATOR" : "DELIVERY_CONFIRMED_BY_OPERATOR"
+      }
+    });
+    return { reconciled: true, action: input.action };
+  }
+);
+
+const planAdminSchema = z.object({
+  planCode: z.string().trim().regex(/^[A-Z0-9_-]{2,30}$/),
+  status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
+  groupLimit: z.number().int().min(0).max(1000),
+  monthlyMessages: z.number().int().min(0).max(1_000_000),
+  periodEnd: z.string().datetime().nullable().optional()
+}).strict();
+
+// This path is covered by the existing global ADMIN_API_KEY authentication and
+// must remain bound to localhost; customers cannot change their own plan.
+app.patch<{ Params: { tenantId: string } }>("/api/tenants/:tenantId/subscription",
+  async (request, reply) => {
+    const body = planAdminSchema.parse(request.body);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: request.params.tenantId }, select: { id: true }
+    });
+    if (!tenant) return reply.code(404).send({ error: "Workspace not found" });
+    const plan = await prisma.tenantSubscription.upsert({
+      where: { tenantId: tenant.id },
+      create: {
+        tenantId: tenant.id,
+        planCode: body.planCode, status: body.status,
+        groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+        periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
+      },
+      update: {
+        planCode: body.planCode, status: body.status,
+        groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+        periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
+      }
+    });
+    await prisma.tenantAudit.create({
+      data: { tenantId: tenant.id, action: "PLAN_UPDATED_BY_OPERATOR" }
+    });
+    return {
+      tenantId: tenant.id, planCode: plan.planCode, status: plan.status,
+      groups: plan.groupLimit, messagesPerMonth: plan.monthlyMessages,
+      periodEnd: plan.periodEnd
+    };
+  }
+);
+
+app.get("/api/ops/health", async () => ({
+  gateway: await prisma.gatewayHealth.findUnique({ where: { name: "web" } }),
+  retentionDays: cfg.MESSAGE_RETENTION_DAYS
 }));
+
+app.get("/api/languages", async () => {
+  const languages = await loadEnabledLanguages(prisma);
+  return {
+    languages,
+    defaultTargetLanguages: defaultGroupLanguages(languages),
+    maxPerGroup: MAX_GROUP_LANGUAGES
+  };
+});
 
 app.get("/api/groups", async () => {
   const groups = await prisma.group.findMany({ orderBy: { createdAt: "desc" } });
@@ -184,6 +286,11 @@ app.get("/api/groups", async () => {
 
 app.post("/api/groups", async (request, reply) => {
   const data = groupSchema.parse(request.body);
+  const enabledLanguages = await loadEnabledLanguages(prisma);
+  const selectedLanguages = data.targetLanguages ?? defaultGroupLanguages(enabledLanguages);
+  if (!validateTargetLanguages(selectedLanguages, enabledLanguages)) {
+    return reply.code(400).send({ error: "Select languages enabled by the platform (maximum 10)" });
+  }
   if (data.gateway === "web" && !isWebGroupId(data.groupId)) {
     return reply.code(400).send({ error: "Web group IDs must end in @g.us" });
   }
@@ -194,18 +301,29 @@ app.post("/api/groups", async (request, reply) => {
   }
   const group = await prisma.group.upsert({
     where: { whatsappGroupId: data.groupId },
-    create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages },
-    update: { name: data.name, enabled: data.enabled, targetLanguages: data.targetLanguages }
+    create: { whatsappGroupId: data.groupId, gateway, name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages },
+    update: { name: data.name, enabled: data.enabled, targetLanguages: selectedLanguages }
   });
   return reply.code(201).send({ group });
 });
 
 app.patch<{ Params: { groupId: string } }>("/api/groups/:groupId", async (request, reply) => {
   const data = editGroupSchema.parse(request.body);
+  if (data.targetLanguages &&
+      !validateTargetLanguages(data.targetLanguages, await loadEnabledLanguages(prisma))) {
+    return reply.code(400).send({ error: "Unsupported or disabled target languages" });
+  }
   if (!Object.keys(data).length) return reply.code(400).send({ error: "No changes supplied" });
   const group = await prisma.group.findUnique({ where: { whatsappGroupId: request.params.groupId } });
   if (!group) return reply.code(404).send({ error: "Group not found" });
   const updated = await prisma.group.update({ where: { id: group.id }, data });
+  if (data.targetLanguages) await prisma.message.updateMany({
+    where: {
+      groupId: group.id, status: "PENDING", sendStartedAt: null,
+      outputText: { not: null }
+    },
+    data: { outputText: null, sourceLanguage: null }
+  });
   return { group: updated };
 });
 
@@ -234,6 +352,29 @@ app.post("/api/simulate", async (request, reply) => {
   return reply.code(202).send({ accepted: true, note: "Translation will be processed asynchronously; no WhatsApp message is sent." });
 });
 
+// Periodic cleanup and connection health operate independently of translation.
+let maintenance = false;
+const maintenanceTimer = setInterval(async () => {
+  if (maintenance) return;
+  maintenance = true;
+  try {
+    await runRetention(prisma, cfg);
+  } catch (err) {
+    app.log.error({ err }, "Retention cycle failed");
+  } finally { maintenance = false; }
+}, 60 * 60_000);
+maintenanceTimer.unref();
+
+let checkingConnection = false;
+const healthTimer = setInterval(async () => {
+  if (checkingConnection) return;
+  checkingConnection = true;
+  try { await checkGatewayHealth(prisma, cfg); }
+  catch (err) { app.log.error({ err }, "Gateway monitoring cycle failed"); }
+  finally { checkingConnection = false; }
+}, 30_000);
+healthTimer.unref();
+
 let processing = false;
 const timer = setInterval(async () => {
   if (processing) return;
@@ -246,6 +387,8 @@ timer.unref();
 
 async function shutdown() {
   clearInterval(timer);
+  clearInterval(maintenanceTimer);
+  clearInterval(healthTimer);
   await app.close();
   await prisma.$disconnect();
 }

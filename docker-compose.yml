@@ -34,11 +34,21 @@ services:
     environment:
       WEB_GATEWAY_TOKEN: ${WEB_GATEWAY_TOKEN:-}
       WEB_PAIRING_PHONE_NUMBER: ${WEB_PAIRING_PHONE_NUMBER:-}
+      WEB_ACTIVATION_DEBUG: ${WEB_ACTIVATION_DEBUG:-false}
       API_INGRESS_URL: http://api:9028/internal/web/message
       WEB_AUTH_DIR: /data/auth
       PORT: "9029"
     depends_on: [api]
     volumes: [wbot_web_auth:/data/auth]
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+
+  portal:
+    profiles: ["portal"]
+    build: ./frontend
+    restart: unless-stopped
+    depends_on: [api]
+    ports: ["127.0.0.1:${WBOT_PORTAL_PORT:-9032}:8080"]
     networks: [private]
     security_opt: [no-new-privileges:true]
 

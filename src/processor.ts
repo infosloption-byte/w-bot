@@ -1,26 +1,72 @@
 import { MessageStatus } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
-import { configuredLanguages, LANGUAGE_NAMES, normalizeLanguageCode, translationTargets } from "./languages.js";
+import { configuredLanguages, loadEnabledLanguages, normalizeLanguageCode, translationTargets } from "./languages.js";
 import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
 import { GeminiApiError } from "./gemini.js";
 import { sendGatewayText, GatewayUnavailableError } from "./gateways.js";
 
 const MAX_ATTEMPTS = 3;
 
+export function pickFairMessages<T extends { groupId: string; group: { tenantId?: string | null } }>(
+  pending: T[], limit = 10
+): T[] {
+  const queues = new Map<string, T[]>();
+  for (const item of pending) {
+    const key = item.group.tenantId || "legacy:" + item.groupId;
+    const queue = queues.get(key) ?? [];
+    queue.push(item);
+    queues.set(key, queue);
+  }
+  const results: T[] = [];
+  while (results.length < limit && queues.size) {
+    for (const [key, queue] of queues) {
+      const item = queue.shift();
+      if (item) results.push(item);
+      if (!queue.length) queues.delete(key);
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
 export async function processPending(prisma: PrismaClient, provider: TranslationProvider, cfg: Config): Promise<number> {
   const now = new Date();
   // Recover jobs from a crashed process. Outbound delivery is at-least-once.
+  // A crashed worker may have sent a WhatsApp reply but failed to persist its
+  // acknowledgement. Do not resend such messages blindly.
   await prisma.message.updateMany({
-    where: { status: MessageStatus.PROCESSING, nextAttemptAt: { lte: now } },
+    where: {
+      status: MessageStatus.PROCESSING,
+      nextAttemptAt: { lte: now },
+      sendStartedAt: { not: null }
+    },
+    data: {
+      status: MessageStatus.DELIVERY_UNCERTAIN,
+      lastError: "Send acknowledgement unknown after worker interruption"
+    }
+  });
+  await prisma.message.updateMany({
+    where: {
+      status: MessageStatus.PROCESSING,
+      nextAttemptAt: { lte: now },
+      sendStartedAt: null
+    },
     data: { status: MessageStatus.PENDING }
   });
   const pending = await prisma.message.findMany({
     where: { status: MessageStatus.PENDING, nextAttemptAt: { lte: now } },
-    orderBy: { createdAt: "asc" }, take: 10, include: { group: true }
+    orderBy: { createdAt: "asc" }, take: 100, include: { group: true }
   });
+  // Read the global catalog for each worker pass so an operator's language
+  // enable/disable change takes effect on the next newly processed message.
+  const catalog = pending.length ? await loadEnabledLanguages(prisma) : [];
+  const allowed = new Set(catalog.map(x => x.code));
+  const names = Object.fromEntries(catalog.map(x => [x.code, x.name]));
+  // Prevent one busy tenant from monopolizing all 10 jobs per tick.
+  const fairOrder = pickFairMessages(pending, 10);
   let processed = 0;
-  for (const msg of pending) {
+  for (const msg of fairOrder) {
     const claimed = await prisma.message.updateMany({
       where: { id: msg.id, status: MessageStatus.PENDING },
       data: {
@@ -40,8 +86,17 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         processed++;
         continue;
       }
-      const langs = configuredLanguages(msg.group.targetLanguages);
-      if (!langs.length) throw new Error("Group has no valid target languages");
+      const langs = configuredLanguages(msg.group.targetLanguages, allowed);
+      if (!langs.length) {
+        await prisma.message.update({
+          where: { id: msg.id }, data: {
+            status: MessageStatus.COMPLETED, processedAt: new Date(),
+            lastError: "No enabled target languages for this group"
+          }
+        });
+        processed++;
+        continue;
+      }
       let source = msg.sourceLanguage ? normalizeLanguageCode(msg.sourceLanguage) : "";
       let output = msg.outputText;
 
@@ -50,12 +105,12 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         const results: Record<string, string> = {};
         if (provider.translateBatch) {
           // Gemini does language detection and all translations in ONE request.
-          const batch = await provider.translateBatch(msg.originalText, langs);
+          const batch = await provider.translateBatch(msg.originalText, langs, names);
           source = normalizeLanguageCode(batch.sourceLanguage);
           Object.assign(results, batch.translations);
         } else {
           source = source || normalizeLanguageCode(await provider.detect(msg.originalText));
-          for (const target of translationTargets(langs, source)) {
+          for (const target of translationTargets(langs, source, allowed)) {
             results[target] = await provider.translate(msg.originalText, source, target);
           }
         }
@@ -68,7 +123,7 @@ export async function processPending(prisma: PrismaClient, provider: Translation
           if (typeof translated !== "string" || !translated.trim()) {
             throw new Error("Translation missing for " + target);
           }
-          parts.push("🌐 " + LANGUAGE_NAMES[target] + "\n" + translated);
+          parts.push("🌐 " + names[target] + "\n" + translated);
         }
         output = parts.join("\n\n");
         if (output.length > 3900) throw new Error("Translation exceeds WhatsApp text limit");
@@ -77,7 +132,29 @@ export async function processPending(prisma: PrismaClient, provider: Translation
           where: { id: msg.id }, data: { sourceLanguage: source, outputText: output }
         });
       }
+      // Recheck ownership/enablement before sending a delayed queued message.
+      if (msg.group.tenantId) {
+        const liveGroup = await prisma.group.findUnique({
+          where: { id: msg.groupId },
+          select: { tenantId: true, enabled: true, claimedAt: true }
+        });
+        if (!liveGroup || !liveGroup.enabled ||
+            liveGroup.tenantId !== msg.group.tenantId ||
+            liveGroup.claimedAt?.getTime() !== msg.group.claimedAt?.getTime()) {
+          await prisma.message.update({
+            where: { id: msg.id },
+            data: { status: MessageStatus.COMPLETED, processedAt: new Date(), lastError: "Group ownership changed before send" }
+          });
+          processed++;
+          continue;
+        }
+      }
       const sendStarted = Date.now();
+      if (!cfg.dryRun && output) {
+        await prisma.message.update({
+          where: { id: msg.id }, data: { sendStartedAt: new Date() }
+        });
+      }
       const sentId = output ? await sendGatewayText(
         cfg,
         msg.group.gateway,
@@ -90,7 +167,7 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         where: { id: msg.id },
         data: {
           status: MessageStatus.COMPLETED, outboundMessageId: sentId,
-          processedAt: new Date(), lastError: null
+          processedAt: new Date(), lastError: null, sendStartedAt: null
         }
       });
       console.info("Translation job completed", {
@@ -104,11 +181,23 @@ export async function processPending(prisma: PrismaClient, provider: Translation
       const attempts = msg.attempts + 1;
       const permanentlyInvalid = (error instanceof GoogleTranslationError
         || error instanceof GeminiApiError) && error.isPermanentConfigurationError;
+      const mayHaveSent = !cfg.dryRun &&
+        !(error instanceof GatewayUnavailableError);
+      // Only classify as uncertain if the send was actually marked in the DB.
+      const persisted = typeof prisma.message.findUnique === "function"
+        ? await prisma.message.findUnique({
+            where: { id: msg.id }, select: { sendStartedAt: true }
+          })
+        : null;
+      const uncertain = mayHaveSent && Boolean(persisted?.sendStartedAt);
       await prisma.message.update({
         where: { id: msg.id },
         data: {
-          status: permanentlyInvalid || (attempts >= MAX_ATTEMPTS && !(error instanceof GatewayUnavailableError)) ? MessageStatus.FAILED : MessageStatus.PENDING,
-          lastError: message.slice(0, 500),
+          status: uncertain ? MessageStatus.DELIVERY_UNCERTAIN :
+            permanentlyInvalid || (attempts >= MAX_ATTEMPTS && !(error instanceof GatewayUnavailableError))
+              ? MessageStatus.FAILED : MessageStatus.PENDING,
+          sendStartedAt: uncertain ? persisted!.sendStartedAt : null,
+          lastError: (uncertain ? "Delivery acknowledgement uncertain: " : "") + message.slice(0, 420),
           nextAttemptAt: new Date(Date.now() + (error instanceof GatewayUnavailableError ? 60_000 : Math.min(60_000, 5_000 * 2 ** attempts)))
         }
       });

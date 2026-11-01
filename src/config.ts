@@ -2,6 +2,21 @@ import { z } from "zod";
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
+  SAAS_ENABLED: z.enum(["true", "false"]).default("false"),
+  SAAS_BOT_NUMBER: z.string().optional(),
+  SAAS_SIGNUP_CODE: z.string().optional(),
+  SAAS_REQUIRE_EMAIL_VERIFICATION: z.enum(["true", "false"]).default("false"),
+  PORTAL_PUBLIC_URL: z.string().url().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().email().optional(),
+  MESSAGE_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  GATEWAY_ALERT_EMAIL: z.string().email().optional(),
+  SAAS_COOKIE_SECURE: z.enum(["true", "false"]).default("true"),
+  SAAS_MAX_GROUPS: z.coerce.number().int().min(1).max(30).default(3),
+  SAAS_MONTHLY_MESSAGES: z.coerce.number().int().min(10).max(100000).default(1000),
   ADMIN_API_KEY: z.string().min(32),
   WHATSAPP_VERIFY_TOKEN: z.string().min(16),
   WHATSAPP_APP_SECRET: z.string().optional(),
@@ -25,6 +40,13 @@ export type Config = ReturnType<typeof loadConfig>;
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
   const cfg = schema.parse(env);
+  if (cfg.SAAS_ENABLED === "true" && (!cfg.SAAS_SIGNUP_CODE || cfg.SAAS_SIGNUP_CODE.length < 24)) {
+    throw new Error("SAAS_SIGNUP_CODE must be at least 24 characters when portal is enabled");
+  }
+  if (cfg.SAAS_REQUIRE_EMAIL_VERIFICATION === "true" &&
+    (!cfg.SMTP_HOST || !cfg.SMTP_FROM || !cfg.PORTAL_PUBLIC_URL)) {
+    throw new Error("Email verification requires SMTP_HOST, SMTP_FROM and PORTAL_PUBLIC_URL");
+  }
   if (cfg.TRANSLATION_PROVIDER === "google" && !cfg.GOOGLE_TRANSLATE_API_KEY) {
     throw new Error("GOOGLE_TRANSLATE_API_KEY required for google provider");
   }
@@ -38,5 +60,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       && (!cfg.WHATSAPP_APP_SECRET || !cfg.WHATSAPP_ACCESS_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
     throw new Error("Live mode requires an enabled Web gateway or authorized Meta credentials");
   }
-  return { ...cfg, dryRun: cfg.DRY_RUN === "true", webEnabled: cfg.WEB_GATEWAY_ENABLED === "true" };
+  return { ...cfg, dryRun: cfg.DRY_RUN === "true", webEnabled: cfg.WEB_GATEWAY_ENABLED === "true", saasEnabled: cfg.SAAS_ENABLED === "true" };
 }

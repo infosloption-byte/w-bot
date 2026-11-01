@@ -12,9 +12,78 @@ enum GatewayKind {
   WEB
 }
 
+enum MemberRole {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+model PortalUser {
+  id           String       @id @default(cuid()) @db.VarChar(191)
+  email        String       @unique @db.VarChar(191)
+  displayName  String       @db.VarChar(100)
+  passwordHash String       @db.VarChar(255)
+  createdAt    DateTime     @default(now())
+  emailVerifiedAt DateTime?
+  memberships  TenantMember[]
+  sessions     PortalSession[]
+  activations  GroupActivation[]
+  accountTokens AccountToken[]
+}
+
+model Tenant {
+  id          String            @id @default(cuid()) @db.VarChar(191)
+  name        String            @db.VarChar(191)
+  createdAt   DateTime          @default(now())
+  members     TenantMember[]
+  groups      Group[]
+  activations GroupActivation[]
+  usageBuckets TenantUsage[]
+  subscription TenantSubscription?
+  auditEvents TenantAudit[]
+}
+
+model TenantMember {
+  tenantId  String       @db.VarChar(191)
+  userId    String       @db.VarChar(191)
+  role      MemberRole   @default(OWNER)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      PortalUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime     @default(now())
+  @@id([tenantId, userId])
+}
+
+model PortalSession {
+  id        String      @id @default(cuid()) @db.VarChar(191)
+  tokenHash String      @unique @db.Char(64)
+  userId    String      @db.VarChar(191)
+  user      PortalUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  @@index([userId, expiresAt])
+}
+
+model GroupActivation {
+  id         String       @id @default(cuid()) @db.VarChar(191)
+  codeHash   String       @unique @db.Char(64)
+  tenantId   String       @db.VarChar(191)
+  createdBy  String       @db.VarChar(191)
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator    PortalUser   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  activatedGroupId String? @db.VarChar(191)
+  createdAt  DateTime     @default(now())
+  @@index([tenantId, expiresAt])
+}
+
 model Group {
   id              String    @id @default(cuid()) @db.VarChar(191)
   whatsappGroupId String    @unique @db.VarChar(191)
+  tenantId        String?   @db.VarChar(191)
+  claimedAt       DateTime?
+  consentAt       DateTime?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   name            String    @db.VarChar(191)
   enabled         Boolean   @default(true)
   gateway         GatewayKind @default(OFFICIAL)
@@ -22,6 +91,8 @@ model Group {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   messages        Message[]
+
+  @@index([tenantId])
 }
 
 enum MessageStatus {
@@ -29,6 +100,7 @@ enum MessageStatus {
   PROCESSING
   COMPLETED
   FAILED
+  DELIVERY_UNCERTAIN
 }
 
 model Message {
@@ -47,8 +119,124 @@ model Message {
   lastError         String?       @db.VarChar(500)
   createdAt         DateTime      @default(now())
   processedAt       DateTime?
+  sendStartedAt     DateTime?
 
   @@unique([groupId, externalMessageId])
   @@index([status, nextAttemptAt])
   @@index([groupId, createdAt])
+}
+
+enum AccountTokenKind {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+model AccountToken {
+  id        String           @id @default(cuid()) @db.VarChar(191)
+  userId    String           @db.VarChar(191)
+  user      PortalUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AccountTokenKind
+  tokenHash String           @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, kind, expiresAt])
+}
+
+model TenantUsage {
+  tenantId String   @db.VarChar(191)
+  month    String   @db.VarChar(7)
+  messages Int      @default(0)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, month])
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model TenantSubscription {
+  tenantId       String  @id @db.VarChar(191)
+  tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planCode       String  @default("PILOT") @db.VarChar(30)
+  status         SubscriptionStatus @default(TRIAL)
+  groupLimit     Int     @default(3)
+  monthlyMessages Int   @default(1000)
+  periodEnd      DateTime?
+  updatedAt      DateTime @updatedAt
+}
+
+model TenantAudit {
+  id         String   @id @default(cuid()) @db.VarChar(191)
+  tenantId   String   @db.VarChar(191)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorId    String?  @db.VarChar(191)
+  groupId    String?  @db.VarChar(191)
+  action     String   @db.VarChar(64)
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}
+
+model GatewayHealth {
+  name        String   @id @db.VarChar(30)
+  state       String   @db.VarChar(20)
+  checkedAt   DateTime @default(now())
+  changedAt   DateTime @default(now())
+  alertedAt   DateTime?
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  VIEWER
+}
+
+model PlatformAdmin {
+  id           String            @id @default(cuid()) @db.VarChar(191)
+  email        String            @unique @db.VarChar(191)
+  displayName  String            @db.VarChar(100)
+  passwordHash String            @db.VarChar(255)
+  role         PlatformRole      @default(SUPER_ADMIN)
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  lastLoginAt  DateTime?
+  sessions     PlatformSession[]
+  auditEntries PlatformAudit[]
+}
+
+model PlatformSession {
+  id         String        @id @default(cuid()) @db.VarChar(191)
+  tokenHash  String        @unique @db.Char(64)
+  adminId    String        @db.VarChar(191)
+  admin      PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime      @default(now())
+
+  @@index([adminId, expiresAt])
+}
+
+model PlatformAudit {
+  id          String        @id @default(cuid()) @db.VarChar(191)
+  adminId     String        @db.VarChar(191)
+  admin       PlatformAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action      String        @db.VarChar(64)
+  targetId    String?       @db.VarChar(191)
+  createdAt   DateTime      @default(now())
+
+  @@index([createdAt])
+}
+
+model LanguageCatalog {
+  code      String   @id @db.VarChar(8)
+  name      String   @db.VarChar(80)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, name])
 }

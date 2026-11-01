@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { TranslationProvider, TranslationBatch } from "./translation.js";
-import { isLanguage, LANGUAGE_NAMES, normalizeLanguageCode } from "./languages.js";
+import { MAX_GROUP_LANGUAGES, isValidLanguageCode, LANGUAGE_NAMES, normalizeLanguageCode } from "./languages.js";
 
 export class GeminiApiError extends Error {
   constructor(public readonly httpStatus: number, public readonly reason: string) {
@@ -38,9 +38,11 @@ function parseErrorReason(data: unknown): string {
  * Returned source language is normalized before being persisted to MySQL.
  */
 export function createGeminiProvider(apiKey: string, model: string, thinkingLevel: "minimal" | "low" | "medium" | "high" = "minimal"): TranslationProvider {
-  async function translateBatch(text: string, targets: string[]): Promise<TranslationBatch> {
+  async function translateBatch(text: string, targets: string[], names: Record<string, string> = LANGUAGE_NAMES): Promise<TranslationBatch> {
     const languages = [...new Set(targets.map(normalizeLanguageCode))];
-    if (languages.length === 0 || languages.length > 5 || languages.some(code => !isLanguage(code))) {
+    if (languages.length === 0 || languages.length > MAX_GROUP_LANGUAGES ||
+        languages.some(code => !isValidLanguageCode(code) || typeof names[code] !== "string" ||
+          !names[code].trim() || names[code].length > 80)) {
       throw new Error("Invalid Gemini target languages");
     }
 
@@ -58,7 +60,7 @@ export function createGeminiProvider(apiKey: string, model: string, thinkingLeve
           text: [
             "You are a precise multilingual chat translation service.",
             "Detect the primary language of the input message and return its ISO language code.",
-            "Use he for Hebrew, en for English, si for Sinhala, uz for Uzbek, and ru for Russian. Detect other source languages normally.",
+            "Use standard ISO language codes, including he for Hebrew, en for English, si for Sinhala, uz for Uzbek, and ru for Russian. Detect other source languages normally.",
             "For Uzbek, use standard Latin-script Uzbek unless the input specifically requires Cyrillic.",
             "Translate the message into every requested target language.",
             "If a target matches the source language, copy the original text unchanged.",
@@ -74,7 +76,7 @@ export function createGeminiProvider(apiKey: string, model: string, thinkingLeve
         parts: [{
           text: JSON.stringify({
             task: "Translate this message accurately into all target languages",
-            targets: Object.fromEntries(languages.map(code => [code, LANGUAGE_NAMES[code]])),
+            targets: Object.fromEntries(languages.map(code => [code, names[code]])),
             message: text
           })
         }]
@@ -96,7 +98,7 @@ export function createGeminiProvider(apiKey: string, model: string, thinkingLeve
           : model.startsWith("gemini-3.")
             ? { thinkingLevel }
             : undefined,
-        maxOutputTokens: 4096
+        maxOutputTokens: 8192
       }
     };
 

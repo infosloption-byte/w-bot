@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage } from "../validation.mjs";
+import { isGroupJid, extractLiveMessage, isPairingPhoneNumber, buildQuotedMessage, diagnoseIncomingGroupMessage } from "../validation.mjs";
 
 test("group IDs are accepted, direct chats and URLs rejected", () => {
   assert.equal(isGroupJid("120363123456789012@g.us"), true);
@@ -60,4 +60,16 @@ test("quoted replies use the original message key and support WhatsApp LID parti
   assert.equal(buildQuotedMessage("120363412606399130@g.us", {
     messageId: "abc", senderId: "94771234567@s.whatsapp.net", text: "Hello"
   })?.key.participant, "94771234567@s.whatsapp.net");
+});
+
+test("group diagnostics expose only safe filter reasons, not the WhatsApp message", () => {
+  assert.equal(diagnoseIncomingGroupMessage(live, "notify"), "accepted");
+  assert.equal(diagnoseIncomingGroupMessage(live, "append"), "not_live_notify");
+  assert.equal(diagnoseIncomingGroupMessage({ ...live, key: { ...live.key, fromMe: true } }, "notify"), "from_bot_account");
+  assert.equal(diagnoseIncomingGroupMessage({ ...live, key: { ...live.key, participant: undefined } }, "notify"), "missing_sender_id");
+  assert.equal(diagnoseIncomingGroupMessage({ ...live, message: { imageMessage: {} } }, "notify"), "non_text_or_unsupported_wrapper");
+  assert.equal(diagnoseIncomingGroupMessage({ ...live, key: { ...live.key, remoteJid: "123@s.whatsapp.net" } }, "notify"), "not_group");
+  const reason = diagnoseIncomingGroupMessage({ ...live, message: { conversation: "/wbot connect SECRET" } }, "notify");
+  assert.equal(reason, "accepted");
+  assert.ok(!reason.includes("SECRET"));
 });

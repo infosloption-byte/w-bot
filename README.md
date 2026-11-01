@@ -73,3 +73,27 @@ A database migration updates existing groups using exactly the previous five-lan
 ## Show all five languages, even when the source matches
 
 Outgoing WhatsApp replies always contain Hebrew, English, Sinhala, Uzbek, and Russian sections. The section matching the detected input language repeats the original text verbatim; all other sections are translated. The native WhatsApp quotation of the original message remains enabled.
+
+## Multi-customer Model B pilot
+
+Model B is being developed on the feature/model-b-shared-number-saas branch. Customers register an invite-only workspace, add the shared W-Bot number to a group, and ask an actual WhatsApp group admin to send a one-time activation command. Groups and usage are tenant-scoped, with a separate React dashboard. The existing Baileys session and Gemini translation service remain intact. Read [Model B Pilot](docs/MODEL_B_PILOT.md) before deployment. Baileys remains unofficial and is not an authorized commercial WhatsApp Groups API.
+
+## Model B SaaS — account security, isolation, quotas and reliability
+
+The Model B hardening build adds email/password recovery, tenant-scoped audit history, group lifecycle and privacy controls, atomic message allowance enforcement, operator-managed subscription status, gateway health checks, and safer queue recovery. The implementation remains an **invite-only pilot**, not an authorized WhatsApp commercial integration. See [Model B hardening and deployment](docs/MODEL_B_HARDENING.md) for the backup/migration sequence, SMTP requirements and acceptance tests.
+
+## Dedicated Platform Admin Console
+
+A separate platform administrator account and operations console monitor multi-customer tenant workspaces, registered users, WhatsApp groups, delivery failures, usage, subscriptions, gateway health and audits. Administrators are created by a one-time trusted CLI bootstrap; customer registrations never become platform administrators. Build fix: missing Prisma Message.sendStartedAt field restored. See [Platform Admin deployment instructions](docs/PLATFORM_ADMIN.md). The feature remains in draft and must pass builds and migration checks before live deployment.
+
+## Platform-managed translation languages
+
+The Platform Admin **Languages** module manages which translation targets customers may use. The original five remain enabled, with more language presets available to enable or custom language codes to add. Customers may select up to ten enabled languages per group. See [language catalogue and rollout](docs/LANGUAGE_CATALOG.md).
+
+## Responsive Customer and Platform Admin Portals
+
+Both portals support desktop collapsed/expanded sidebars (saved separately), off-canvas touch-friendly mobile/tablet navigation, adaptive group cards and forms, mobile-friendly labeled Platform Admin tables, accessible keyboard navigation and viewport-safe dialogs. Portal builds include responsive contract tests. See [Responsive portal rollout and device QA](docs/RESPONSIVE_PORTALS.md). No API/database or WhatsApp gateway changes are required.
+
+## Custom domain and HTTPS
+
+W-Bot can be published under `wbot.sloptions.xyz` using the existing Lightsail Nginx reverse proxy with Let's Encrypt TLS, preserving private Docker ports. The host configuration includes an independent HTTP Basic Auth gate on the Platform Admin UI **and** its API endpoints. See [DNS, Nginx, TLS and security rollout](docs/PUBLIC_DOMAIN.md). Domain/DNS/certificate changes are not automatically applied by GitHub.

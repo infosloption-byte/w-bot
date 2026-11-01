@@ -26,6 +26,11 @@ test("worker makes one Gemini batch call and includes all five languages in dry-
     }
   };
   const db = {
+    languageCatalog: { findMany: async () => [
+      { code: "he", name: "Hebrew" }, { code: "en", name: "English" },
+      { code: "si", name: "Sinhala" }, { code: "uz", name: "Uzbek" },
+      { code: "ru", name: "Russian" }
+    ] },
     message: {
       updateMany: async () => ({ count: 1 }),
       findMany: async () => [record],
@@ -91,6 +96,11 @@ test("Russian input appears verbatim in the Russian section along with four tran
     }
   };
   const db = {
+    languageCatalog: { findMany: async () => [
+      { code: "he", name: "Hebrew" }, { code: "en", name: "English" },
+      { code: "si", name: "Sinhala" }, { code: "uz", name: "Uzbek" },
+      { code: "ru", name: "Russian" }
+    ] },
     message: {
       updateMany: async () => ({ count: 1 }),
       findMany: async () => [record],
