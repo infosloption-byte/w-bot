@@ -85,12 +85,12 @@ test("bulk monitoring cannot exceed subscribed group slots", async () => {
     await app.close();
   } finally { globalThis.fetch = original; }
 });
-test("bulk monitoring refuses attempts without explicit consent", async () => {
+test("bulk monitoring requires the mutation security header", async () => {
   const app = Fastify(); registerAlertsRoutes(app, {} as PrismaClient, cfg);
   const response = await app.inject({
     method: "POST", url: "/portal/api/alerts/groups/bulk",
     payload: { connectionId, groupIds: groups, consentConfirmed: false }
   });
-  assert.equal(response.statusCode, 401);
+  assert.equal(response.statusCode, 403);
   await app.close();
 });

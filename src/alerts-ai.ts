@@ -17,9 +17,16 @@ export const searchParameters = z.array(z.object({
     seen.add(normalized);
   }
 });
-export type SearchParameter = z.infer<typeof searchParameters>;
+// searchParameters validates an ARRAY. A single rule requirement is one element.
+export type SearchParameter = z.infer<typeof searchParameters>[number];
 export type SemanticRule = { id: string; name: string; parameters: SearchParameter[] };
-export type SemanticMatch = { summary: string; contactNumber: string | null; quotedPrice: null };
+// Shared result contract: legacy deterministic rules may include a numeric price,
+// while semantic rules currently leave it null.
+export type SemanticMatch = {
+  summary: string;
+  contactNumber: string | null;
+  quotedPrice: number | null;
+};
 
 const responseSchema = z.object({
   matches: z.array(z.object({
