@@ -8,6 +8,7 @@ import { ByonConnections } from "./ByonConnections.js";
 import { FeatureHub, SmartAlerts } from "./SmartAlerts.js";
 import { CustomerDashboard, TranslationActivity } from "./CustomerDashboard.js";
 import "./theme-refresh.css";
+import "./workspace-pages.css";
 import "./connections.css";
 
 type View = "dashboard" | "translation" | "alerts" | "connections" | "plans" | "settings";
