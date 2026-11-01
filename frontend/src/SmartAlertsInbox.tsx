@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { portalRequest } from "./PortalAccount.js";
+import { AlertPicker } from "./AlertPicker.js";
 import "./alerts-inbox.css";
 
 type ListMatch = {
@@ -98,21 +99,18 @@ export function SmartAlertsInbox() {
       <button className="button secondary" type="submit">Search</button>
     </form>
     <div className="alert-filter-row">
-      <label className="alert-field">Read status
-        <select value={read} onChange={e=>{setPage(0);setRead(e.target.value)}}>
-          <option value="all">All alerts</option><option value="unread">Unread</option>
-          <option value="read">Read</option>
-        </select></label>
-      <label className="alert-field">Monitored group
-        <select value={group} onChange={e=>{setPage(0);setGroup(e.target.value)}}>
-          <option value="">All groups</option>
-          {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
-        </select></label>
-      <label className="alert-field">Intelligent search
-        <select value={rule} onChange={e=>{setPage(0);setRule(e.target.value)}}>
-          <option value="">All searches</option>
-          {rules.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
-        </select></label>
+      <div className="alert-field"><span>Read status</span>
+        <AlertPicker ariaLabel="Read status" value={read} onChange={v=>{setPage(0);setRead(v)}}
+          options={[{value:"all",label:"All alerts"},{value:"unread",label:"Unread"},{value:"read",label:"Read"}]}/>
+      </div>
+      <div className="alert-field"><span>Monitored group</span>
+        <AlertPicker ariaLabel="Monitored group" value={group} onChange={v=>{setPage(0);setGroup(v)}}
+          options={[{value:"",label:"All groups"},...groups.map(g=>({value:g.id,label:g.name}))]}/>
+      </div>
+      <div className="alert-field"><span>Intelligent search</span>
+        <AlertPicker ariaLabel="Intelligent search" value={rule} onChange={v=>{setPage(0);setRule(v)}}
+          options={[{value:"",label:"All searches"},...rules.map(r=>({value:r.id,label:r.name}))]}/>
+      </div>
     </div>
     {(search||read!=="all"||group||rule) && <button type="button" className="text-button"
       onClick={()=>{setText("");setSearch("");setRead("all");setGroup("");setRule("");setPage(0);}}>
