@@ -395,6 +395,8 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
     if (!user) return;
     if (!isAdmin(user.role)) return reply.code(403).send({ error: "Workspace admin required" });
     const input = channelInput.parse(req.body);
+    if (cfg.BYON_GATEWAY_ENABLED !== "true" || cfg.dryRun)
+      return reply.code(409).send({ error: "Live WhatsApp delivery is not enabled on the server" });
     const [sub, connection, policy] = await Promise.all([
       ensureCurrentAlerts(prisma, user.tenantId),
       prisma.customerWhatsAppConnection.findFirst({
