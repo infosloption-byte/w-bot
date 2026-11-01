@@ -282,7 +282,7 @@ const server = createServer(async (req, res) => {
   if (!auth(req)) return respond(res,401,{error:"Unauthorized"});
   try {
     const pathname = new URL(req.url || "/", "http://localhost").pathname;
-    const match = /^\/connections\/(c[a-z0-9]{18,35})\/(start|status|groups|send|revoke)$/.exec(pathname);
+    const match = /^\/connections\/(c[a-z0-9]{18,35})\/(start|status|groups|send|notify|revoke)$/.exec(pathname);
     if (!match) return respond(res,404,{error:"Not found"});
     const [,id,action] = match;
     if (req.method === "POST" && action === "start") {
@@ -311,6 +311,21 @@ const server = createServer(async (req, res) => {
       return respond(res,200,{groups:Object.values(participating)
         .filter(g => isGroupJid(g.id))
         .map(g => ({ groupId:g.id,name:g.subject })).slice(0,200)});
+    }
+    // Separate Smart Alerts notification pathway: no quoted messages,
+    // no group translation involvement and no group-creation authority.
+    if (req.method === "POST" && action === "notify") {
+      const input = await body(req);
+      if (!isGroupJid(input.groupId) || typeof input.text !== "string" ||
+          !input.text.startsWith("🔔 W-Bot Smart Alert") ||
+          input.text.length > 1600)
+        return respond(res,400,{error:"Invalid alert notification"});
+      await entry.socket.groupMetadata(input.groupId);
+      const result = await entry.socket.sendMessage(input.groupId,{text:input.text});
+      rememberBotMessage(entry,result);
+      return result?.key?.id ?
+        respond(res,200,{messageId:result.key.id}) :
+        respond(res,502,{error:"Notification unacknowledged"});
     }
     if (req.method === "POST" && action === "send") {
       const input = await body(req);

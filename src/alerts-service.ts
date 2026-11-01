@@ -122,10 +122,29 @@ export async function processPendingAlerts(
                 where: { tenantId: event.tenantId }
               });
               if (!current?.enabled || !planActive(current)) return;
-              await tx.alertMatch.create({
+              const created = await tx.alertMatch.create({
                 data: { tenantId: event.tenantId, watchEventId: event.id,
-                  watchRuleId: rule.id, ...match }
+                  watchRuleId: rule.id, ...match,
+                  criteriaSnapshot: rule.parameters ?? {
+                    legacyKeywords: rule.keywords,
+                    ...(rule.origin ? { origin: rule.origin } : {}),
+                    ...(rule.destination ? { destination: rule.destination } : {})
+                  } }
               });
+              // Queue only new matches with an explicitly opted-in notification channel.
+              // This is independent of the translation group/reply pipeline.
+              const destination = await tx.alertNotificationChannel.findUnique({
+                where: { tenantId: event.tenantId }
+              });
+              if (destination?.enabled) {
+                await tx.alertDelivery.create({
+                  data: {
+                    tenantId: event.tenantId, alertMatchId: created.id,
+                    connectionId: destination.connectionId,
+                    groupId: destination.groupId
+                  }
+                });
+              }
               await tx.$executeRaw`INSERT IGNORE INTO AlertUsage (tenantId, month, matches, analyses)
                 VALUES (${event.tenantId}, ${monthKey()}, 0, 0)`;
               const reserved = await tx.alertUsage.updateMany({

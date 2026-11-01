@@ -14,6 +14,7 @@ import { byonAuthorized, connectionKey, connectionTypeAllowed } from "./byon-sha
 import { registerPlatformRoutes } from "./platform.js";
 import { registerAlertsRoutes } from "./alerts-routes.js";
 import { ingestWatchedMessage, processPendingAlerts } from "./alerts-service.js";
+import { processAlertDeliveries } from "./alerts-delivery.js";
 import { ingestTenantMessage } from "./quotas.js";
 import { runRetention } from "./retention.js";
 import { checkGatewayHealth } from "./gateway-health.js";
@@ -439,9 +440,21 @@ const alertsTimer = setInterval(async () => {
 }, 1200);
 alertsTimer.unref();
 
+// Optional customer-selected WhatsApp alert group: independent of translation.
+let sendingAlerts = false;
+const deliveryTimer = setInterval(async () => {
+  if (sendingAlerts) return;
+  sendingAlerts = true;
+  try { await processAlertDeliveries(prisma, cfg); }
+  catch { app.log.error("Smart Alerts notification cycle failed"); }
+  finally { sendingAlerts = false; }
+}, 4000);
+deliveryTimer.unref();
+
 async function shutdown() {
   clearInterval(timer);
   clearInterval(alertsTimer);
+  clearInterval(deliveryTimer);
   clearInterval(maintenanceTimer);
   clearInterval(healthTimer);
   await app.close();
