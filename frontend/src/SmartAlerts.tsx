@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { portalRequest } from "./PortalAccount.js";
+import { SmartAlertsInbox } from "./SmartAlertsInbox.js";
+import { AlertNotificationSettings } from "./AlertNotificationSettings.js";
 import "./alerts.css";
 
 type Feature = {
@@ -47,7 +49,7 @@ export function FeatureHub(props: { onOpenAlerts: () => void }) {
         <h3>{type === "translation" ? "Translate messages" : "Find matching opportunities"}</h3>
         <p className="muted">{type === "translation"
           ? "Reply in connected translation groups with the languages you choose."
-          : "Monitor authorized groups privately and see matches in your inbox. No group replies."}</p>
+          : "Monitor authorized groups privately, review matches in the inbox, and optionally notify a dedicated group."}</p>
         <div className="detail"><span>Subscription</span><strong>{feature?.planCode ?? "Not subscribed"}</strong></div>
         <div className="detail"><span>Billing status</span><strong>{feature?.status ?? "Loading"}</strong></div>
         <div className="feature-actions">
@@ -303,23 +305,7 @@ export function SmartAlerts({
         </div>)}</div>
       </section>}
     </div>}
-    {section === "inbox" && <section className="panel">
-      <div className="panel-heading"><h3>Private alerts inbox</h3><span className="muted text-small">Recent matches · in-app only</span></div>
-      <p className="muted text-small">Matches are visible only to signed-in workspace members. Monitoring never posts or replies inside the WhatsApp group.</p>
-      {matches.length ? <div className="alert-inbox">{matches.map(item=><article className={"alert-match "+(item.isRead?"is-read":"")} key={item.id}>
-        <div className="alert-match-header"><strong>{item.rule.name}</strong>
-          <span className="muted text-small">{new Date(item.createdAt).toLocaleString()}</span></div>
-        <p>{item.summary}</p>
-        <div className="alert-match-meta">
-          <span>Group: {item.event.group.name}</span>
-          {item.quotedPrice!=null && <span>Amount: {item.quotedPrice.toLocaleString()}</span>}
-          {item.contactNumber && <span>Contact: {item.contactNumber}</span>}
-        </div>
-        {!item.isRead && <button className="text-button" disabled={busy} onClick={()=>void action(
-          ()=>portalRequest("/alerts/inbox/"+encodeURIComponent(item.id),{isRead:true},"PATCH"),
-          "Alert marked as read.")}>Mark read</button>}
-      </article>)}</div> : <p className="muted">No matching messages yet. Add a monitored group and rule to begin.</p>}
-    </section>}
+    {section === "inbox" && <SmartAlertsInbox/>}
     {section === "overview" && <section className="home-service-grid">
       <article className="home-service-card"><div className="eyebrow">STEP 1</div>
         <h3>Monitored WhatsApp groups</h3>
@@ -337,12 +323,13 @@ export function SmartAlerts({
       </article>
       <article className="home-service-card"><div className="eyebrow">STEP 3</div>
         <h3>Review your matches</h3>
-        <p>Read matching opportunities privately. Smart Alerts never replies in monitored groups.</p>
+        <p>Read matching opportunities privately, and optionally send notifications to a separate group.</p>
         <button className="button secondary" onClick={() => onNavigate?.("inbox")}>
           Open inbox <span aria-hidden="true">→</span>
         </button>
       </article>
     </section>}
-    <p className="muted text-small">The Gemini-based semantic matcher is independently enabled by the administrator; AI results should always be checked against the original group message. External notification delivery is not yet available. WhatsApp linked-device monitoring is unofficial and may be restricted.</p>
+    {section === "overview" && <AlertNotificationSettings/>}
+    <p className="muted text-small">The Gemini-based semantic matcher is independently enabled by the administrator; AI results should always be checked against the original group message. Optional WhatsApp delivery to a separately authorized notification group is available. WhatsApp linked-device monitoring is unofficial and may be restricted.</p>
   </div>;
 }
