@@ -320,18 +320,142 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
     return { removed: true };
   });
 
+  const inboxFilters = z.object({
+    read: z.enum(["all", "read", "unread"]).default("all"),
+    q: z.string().trim().max(100).optional(),
+    group: z.string().max(191).optional(),
+    rule: z.string().max(191).optional(),
+    page: z.coerce.number().int().min(0).max(20).default(0)
+  });
   app.get("/portal/api/alerts/inbox", async (req, reply) => {
     const user = await requirePortalAuth(prisma, req, reply);
     if (!user) return;
+    const query = inboxFilters.parse(req.query);
+    const where: Prisma.AlertMatchWhereInput = {
+      tenantId: user.tenantId,
+      ...(query.read === "all" ? {} : { isRead: query.read === "read" }),
+      ...(query.rule ? { watchRuleId: query.rule } : {}),
+      ...(query.group ? { event: { watchGroupId: query.group } } : {}),
+      ...(query.q ? { OR: [
+        { summary: { contains: query.q } },
+        { rule: { name: { contains: query.q } } },
+        { event: { group: { name: { contains: query.q } } } }
+      ] } : {})
+    };
     const matches = await prisma.alertMatch.findMany({
-      where: { tenantId: user.tenantId }, orderBy: { createdAt: "desc" }, take: 100,
+      where, orderBy: { createdAt: "desc" }, skip: query.page * 50, take: 51,
       select: { id: true, summary: true, quotedPrice: true, contactNumber: true,
         isRead: true, createdAt: true,
-        rule: { select: { name: true } },
-        event: { select: { externalMessageId: true,
-          group: { select: { name: true } } } } }
+        rule: { select: { id: true, name: true } },
+        delivery: { select: { status: true, sentAt: true } },
+        event: { select: { externalMessageId: true, watchGroupId: true,
+          createdAt: true, group: { select: { name: true } } } } }
     });
-    return { matches };
+    return { matches: matches.slice(0,50), hasMore: matches.length > 50, page: query.page };
+  });
+
+  app.get<{ Params: { id: string } }>("/portal/api/alerts/inbox/:id", async (req, reply) => {
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    const match = await prisma.alertMatch.findFirst({
+      where: { id: req.params.id, tenantId: user.tenantId },
+      select: {
+        id: true, summary: true, contactNumber: true, quotedPrice: true,
+        isRead: true, createdAt: true, criteriaSnapshot: true,
+        rule: { select: { id: true, name: true, parameters: true } },
+        delivery: { select: { status: true, sentAt: true, attempts: true } },
+        event: { select: {
+          externalMessageId: true, createdAt: true, processedAt: true,
+          group: { select: { name: true } }
+        } }
+      }
+    });
+    if (!match) return reply.code(404).send({ error: "Alert not found" });
+    return { match };
+  });
+
+  const channelInput = z.object({
+    connectionId: z.string().refine(isConnectionId),
+    groupId: z.string().refine(isWebGroupId),
+    consentConfirmed: z.literal(true)
+  }).strict();
+  app.get("/portal/api/alerts/notification-channel", async (req, reply) => {
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    const channel = await prisma.alertNotificationChannel.findUnique({
+      where: { tenantId: user.tenantId },
+      select: { connectionId: true, groupId: true, groupName: true,
+        enabled: true, updatedAt: true }
+    });
+    return { channel };
+  });
+  app.put("/portal/api/alerts/notification-channel", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    if (!isAdmin(user.role)) return reply.code(403).send({ error: "Workspace admin required" });
+    const input = channelInput.parse(req.body);
+    const [sub, connection, policy] = await Promise.all([
+      ensureCurrentAlerts(prisma, user.tenantId),
+      prisma.customerWhatsAppConnection.findFirst({
+        where: { id: input.connectionId, tenantId: user.tenantId, active: true, status: "CONNECTED" }
+      }),
+      prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } })
+    ]);
+    if (!sub?.enabled || !connection || !policy || !connectionTypeAllowed(policy,connection.kind))
+      return reply.code(403).send({ error: "Active subscription and connected account required" });
+    const [watched, translation] = await Promise.all([
+      prisma.watchGroup.findFirst({ where: {
+        tenantId: user.tenantId, connectionId: input.connectionId,
+        whatsappGroupId: input.groupId
+      } }),
+      prisma.group.findFirst({ where: {
+        tenantId: user.tenantId, connectionId: input.connectionId,
+        whatsappGroupId: input.groupId, enabled: true
+      } })
+    ]);
+    if (watched || translation) return reply.code(409).send({
+      error: "Choose a dedicated group not used for monitoring or translation"
+    });
+    let groupName: string | undefined;
+    try {
+      const response = await byonRequest(cfg, "/connections/" + connection.id + "/groups");
+      if (!response.ok) return reply.code(503).send({ error: "Cannot verify group membership" });
+      const result = await response.json() as { groups?: Array<{ groupId: string; name: string }> };
+      groupName = result.groups?.find(g => g.groupId === input.groupId)?.name;
+    } catch { return reply.code(503).send({ error: "Cannot verify group membership" }); }
+    if (!groupName) return reply.code(403).send({ error: "Account is not in the selected group" });
+    const channel = await prisma.alertNotificationChannel.upsert({
+      where: { tenantId: user.tenantId },
+      create: { tenantId: user.tenantId, connectionId: connection.id,
+        groupId: input.groupId, groupName: groupName.slice(0,191),
+        consentAt: new Date(), enabled: true },
+      update: { connectionId: connection.id, groupId: input.groupId,
+        groupName: groupName.slice(0,191), consentAt: new Date(), enabled: true }
+    });
+    // Queued deliveries targeting a previous channel must never be redirected.
+    await prisma.alertDelivery.updateMany({
+      where: { tenantId: user.tenantId, status: "PENDING",
+        OR: [{ connectionId: { not: channel.connectionId } },
+          { groupId: { not: channel.groupId } }] },
+      data: { status: "CANCELED" }
+    });
+    return { channel: { connectionId: channel.connectionId, groupId: channel.groupId,
+      groupName: channel.groupName, enabled: channel.enabled } };
+  });
+  app.delete("/portal/api/alerts/notification-channel", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    if (!isAdmin(user.role)) return reply.code(403).send({ error: "Workspace admin required" });
+    await prisma.alertNotificationChannel.updateMany({
+      where: { tenantId: user.tenantId }, data: { enabled: false }
+    });
+    await prisma.alertDelivery.updateMany({
+      where: { tenantId: user.tenantId, status: "PENDING" },
+      data: { status: "CANCELED" }
+    });
+    return { disabled: true };
   });
 
   app.patch<{ Params: { id: string } }>("/portal/api/alerts/inbox/:id", async (req, reply) => {
