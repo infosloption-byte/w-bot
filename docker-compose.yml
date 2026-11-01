@@ -43,6 +43,23 @@ services:
     networks: [private]
     security_opt: [no-new-privileges:true]
 
+  byon-gateway:
+    profiles: ["byon"]
+    build:
+      context: .
+      dockerfile: byon-gateway/Dockerfile
+    restart: unless-stopped
+    environment:
+      BYON_GATEWAY_TOKEN: ${BYON_GATEWAY_TOKEN:-}
+      BYON_AUTH_DIR: /data/auth
+      BYON_API_ORIGIN: http://api:9028
+      BYON_MAX_SESSIONS: ${BYON_MAX_SESSIONS:-20}
+      PORT: "9039"
+    depends_on: [api]
+    volumes: [wbot_byon_auth:/data/auth]
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+
   portal:
     profiles: ["portal"]
     build: ./frontend
@@ -58,3 +75,4 @@ networks:
 volumes:
   wbot_mysql:
   wbot_web_auth:
+  wbot_byon_auth:

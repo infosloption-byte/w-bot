@@ -41,6 +41,7 @@ model Tenant {
   usageBuckets TenantUsage[]
   subscription TenantSubscription?
   auditEvents TenantAudit[]
+  whatsappConnections CustomerWhatsAppConnection[]
 }
 
 model TenantMember {
@@ -72,6 +73,7 @@ model GroupActivation {
   creator    PortalUser   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   expiresAt  DateTime
   consumedAt DateTime?
+  connectionId String? @db.VarChar(191)
   activatedGroupId String? @db.VarChar(191)
   createdAt  DateTime     @default(now())
   @@index([tenantId, expiresAt])
@@ -79,7 +81,10 @@ model GroupActivation {
 
 model Group {
   id              String    @id @default(cuid()) @db.VarChar(191)
-  whatsappGroupId String    @unique @db.VarChar(191)
+  whatsappGroupId String    @db.VarChar(191)
+  connectionKey   String    @default("shared") @db.VarChar(191)
+  connectionId    String?   @db.VarChar(191)
+  connection      CustomerWhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
   tenantId        String?   @db.VarChar(191)
   claimedAt       DateTime?
   consentAt       DateTime?
@@ -93,6 +98,8 @@ model Group {
   messages        Message[]
 
   @@index([tenantId])
+  @@unique([connectionKey, whatsappGroupId])
+  @@index([connectionId])
 }
 
 enum MessageStatus {
@@ -153,6 +160,11 @@ model TenantUsage {
   @@id([tenantId, month])
 }
 
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
@@ -164,9 +176,11 @@ model TenantSubscription {
   tenantId       String  @id @db.VarChar(191)
   tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   planCode       String  @default("PILOT") @db.VarChar(30)
+  billingInterval BillingInterval @default(MONTHLY)
   status         SubscriptionStatus @default(TRIAL)
   groupLimit     Int     @default(3)
   monthlyMessages Int   @default(1000)
+  whatsappConnectionLimit Int @default(0) // 0 = unlimited during pilot
   periodEnd      DateTime?
   updatedAt      DateTime @updatedAt
 }
@@ -239,4 +253,43 @@ model LanguageCatalog {
   updatedAt DateTime @updatedAt
 
   @@index([enabled, name])
+}
+
+enum CustomerWhatsAppKind {
+  PERSONAL
+  BUSINESS
+}
+enum CustomerWhatsAppStatus {
+  CREATED
+  PAIRING
+  CONNECTED
+  DISCONNECTED
+  REQUIRES_REPAIR
+  REVOKED
+}
+
+model CustomerWhatsAppConnection {
+  id           String                    @id @default(cuid()) @db.VarChar(191)
+  tenantId     String                    @db.VarChar(191)
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  label        String                    @db.VarChar(100)
+  kind         CustomerWhatsAppKind
+  status       CustomerWhatsAppStatus    @default(CREATED)
+  phoneLast4   String?                   @db.Char(4)
+  active       Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  lastSeenAt   DateTime?
+  groups       Group[]
+
+  @@index([tenantId, active])
+}
+
+model WhatsAppConnectionPolicy {
+  id                     String   @id @default("global") @db.VarChar(20)
+  personalEnabled        Boolean  @default(true)
+  businessEnabled        Boolean  @default(true)
+  customerNumbersEnabled Boolean  @default(false)
+  maxConnectionsPerTenant Int     @default(0) // 0 = unlimited global pilot policy
+  updatedAt              DateTime @updatedAt
 }

@@ -38,3 +38,16 @@
 .platform-language-suggestions .language-chips{display:flex;flex-wrap:wrap;gap:8px}
 .platform-language-suggestions .chip{font-size:12px}
 @media(max-width:1000px){.language-admin-layout{grid-template-columns:1fr}}
+
+.wbot-plan-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:17px}
+.wbot-plan-choice{display:grid;gap:7px;min-width:0;min-height:108px;text-align:left;border:1px solid #365065;border-radius:12px;background:#132534;color:#eaf5f5;padding:14px}
+.wbot-plan-choice.is-selected{background:#133c36;border-color:#43e2c4;box-shadow:inset 0 0 0 1px #339c8b}
+.wbot-plan-choice strong{font-size:14px}.wbot-plan-choice span{color:#a6bdc9;font-size:12px;line-height:1.4}.wbot-plan-choice b{font-size:14px;color:#77e8d6}
+.wbot-pilot-fields{display:grid;gap:13px;border:1px solid #355163;border-radius:12px;padding:13px}
+.wbot-price-catalog{display:grid;gap:9px;margin-top:17px}
+.wbot-price-row{display:flex;justify-content:space-between;align-items:center;gap:9px;border:1px solid #345168;border-radius:11px;background:#101e2e;padding:13px}
+.wbot-price-row.is-selected{border-color:#43cbb4;background:#15332d}
+.wbot-price-row>div{display:grid;gap:5px}.wbot-price-row strong{color:#e5f4f3;font-size:13px}
+.wbot-price-row small{color:#95b2bf;font-size:11px;line-height:1.5}
+.wbot-price-row>div:last-child{text-align:right;white-space:nowrap}
+@media(max-width:650px){.wbot-plan-picker{grid-template-columns:minmax(0,1fr)}.wbot-price-row{align-items:start}}

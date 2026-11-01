@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { PrismaClient } from "@prisma/client";
 import type { Config } from "./config.js";
+import { registerByonPlatformRoutes } from "./byon-platform.js";
+import { getCommercialPlan, commercialLimits } from "./plans.js";
 import { isValidLanguageCode } from "./languages.js";
 import {
   allowAttempt, digest, hashPassword, verifyPassword, requireMutationHeader
@@ -19,10 +21,13 @@ const changePassword = z.object({
   newPassword: z.string().min(16).max(128)
 }).strict();
 const changePlan = z.object({
-  planCode: z.string().regex(/^[A-Z0-9_-]{2,30}$/),
+  planCode: z.enum(["PILOT","STARTER","TEAM","BUSINESS"]),
+  billingInterval: z.enum(["MONTHLY","YEARLY"]).default("MONTHLY"),
   status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
-  groupLimit: z.number().int().min(0).max(1000),
-  monthlyMessages: z.number().int().min(0).max(1_000_000),
+  // The PILOT is a manual internal allocation; commercial limits always
+  // come from the server-side immutable catalog, not form submissions.
+  groupLimit: z.number().int().min(0).max(1000).optional(),
+  whatsappConnectionLimit: z.number().int().min(0).max(1000).optional(),
   periodEnd: z.string().datetime().nullable().optional()
 }).strict();
 const languageName = z.string().trim().min(2).max(80)
@@ -48,7 +53,7 @@ function fromCookies(req: FastifyRequest): string | null {
     .find(x => x.startsWith(COOKIE + "="))?.slice(COOKIE.length + 1);
   return val && /^[a-zA-Z0-9_-]{40,100}$/.test(val) ? val : null;
 }
-async function adminIdentity(
+export async function adminIdentity(
   prisma: PrismaClient, req: FastifyRequest, reply: FastifyReply
 ) {
   const session = fromCookies(req);
@@ -62,7 +67,7 @@ async function adminIdentity(
   }
   return record.admin;
 }
-function requiredSuperAdmin(
+export function requiredSuperAdmin(
   admin: { role: string }, reply: FastifyReply
 ): boolean {
   if (admin.role === "SUPER_ADMIN") return true;
@@ -82,6 +87,7 @@ async function createPlatformSession(prisma: PrismaClient, adminId: string): Pro
 
 export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClient, cfg: Config) {
   if (!cfg.saasEnabled) return;
+  registerByonPlatformRoutes(app, prisma, cfg);
 
   app.post("/portal/api/platform/auth/login", async (req, reply) => {
     if (!requireMutationHeader(req, reply)) return;
@@ -184,8 +190,8 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         _count: { select: { groups: true, members: true } },
         subscription: {
           select: {
-            planCode: true, status: true, groupLimit: true,
-            monthlyMessages: true, periodEnd: true
+            planCode: true, billingInterval: true, status: true, groupLimit: true,
+            whatsappConnectionLimit: true, periodEnd: true
           }
         },
         members: {
@@ -356,29 +362,76 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
       where: { id: req.params.id }, select: { id: true }
     });
     if (!tenant) return reply.code(404).send({ error: "Workspace not found" });
-    const plan = await prisma.$transaction(async tx => {
+    const catalogPlan = getCommercialPlan(body.planCode);
+    const previous = await prisma.tenantSubscription.findUnique({
+      where: { tenantId: tenant.id },
+      select: { groupLimit: true, whatsappConnectionLimit: true }
+    });
+    const requestedLimits = catalogPlan ? {
+      groups: catalogPlan.groups,
+      whatsappConnections: catalogPlan.whatsappConnections
+    } : commercialLimits("PILOT", {
+      groupLimit: body.groupLimit ?? previous?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+      whatsappConnectionLimit: body.whatsappConnectionLimit ??
+        previous?.whatsappConnectionLimit ?? 0
+    });
+    const assignment = await prisma.$transaction(async tx => {
+      // Serialize with both shared and BYON activation transactions so
+      // switching plans cannot race with activating additional groups.
+      await tx.$queryRaw`SELECT id FROM Tenant WHERE id = ${tenant.id} FOR UPDATE`;
+      if (catalogPlan) {
+        const [groupsUsed, numbersUsed] = await Promise.all([
+          tx.group.count({ where: { tenantId: tenant.id } }),
+          tx.customerWhatsAppConnection.count({
+            where: { tenantId: tenant.id, active: true }
+          })
+        ]);
+        if (groupsUsed > requestedLimits.groups ||
+            numbersUsed > requestedLimits.whatsappConnections) {
+          return { ok: false as const, conflict: {
+            usedGroups: groupsUsed, allowedGroups: requestedLimits.groups,
+            usedNumbers: numbersUsed, allowedNumbers: requestedLimits.whatsappConnections
+          } };
+        }
+      }
       const update = await tx.tenantSubscription.upsert({
         where: { tenantId: tenant.id },
         create: {
           tenantId: tenant.id, planCode: body.planCode, status: body.status,
-          groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+          billingInterval: body.billingInterval,
+          groupLimit: requestedLimits.groups, monthlyMessages: 0,
+          whatsappConnectionLimit: requestedLimits.whatsappConnections,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         },
         update: {
           planCode: body.planCode, status: body.status,
-          groupLimit: body.groupLimit, monthlyMessages: body.monthlyMessages,
+          billingInterval: body.billingInterval,
+          groupLimit: requestedLimits.groups, monthlyMessages: 0,
+          whatsappConnectionLimit: requestedLimits.whatsappConnections,
           periodEnd: body.periodEnd ? new Date(body.periodEnd) : null
         }
       });
       await tx.platformAudit.create({
         data: { adminId: admin.id, action: "TENANT_PLAN_UPDATED", targetId: tenant.id }
       });
-      return update;
+      return { ok: true as const, plan: update };
     });
+    if (!assignment.ok) {
+      return reply.code(409).send({
+        error: "Workspace exceeds the selected plan's group or WhatsApp number limits. Remove excess accounts/groups before downgrading.",
+        ...assignment.conflict
+      });
+    }
+    const plan = assignment.plan;
     return {
       saved: true, plan: {
         code: plan.planCode, status: plan.status,
-        groupLimit: plan.groupLimit, monthlyMessages: plan.monthlyMessages
+        billingInterval: plan.billingInterval,
+        groupLimit: requestedLimits.groups, unlimitedTextTranslations: true,
+        whatsappConnectionLimit: requestedLimits.whatsappConnections,
+        priceCents: catalogPlan
+          ? (body.billingInterval === "YEARLY" ? catalogPlan.yearlyCents : catalogPlan.monthlyCents)
+          : null
       }
     };
   });

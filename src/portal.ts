@@ -13,6 +13,7 @@ import { isWebGroupId } from "./gateways.js";
 import { registerAccountRoutes } from "./portal-accounts.js";
 import { issueAccountToken, mailConfigured, sendAccountEmail } from "./mailer.js";
 import { getTenantLimits, planActive, monthKey } from "./quotas.js";
+import { getCatalog, commercialLimits } from "./plans.js";
 
 const registration = z.object({
   name: z.string().trim().min(2).max(100),
@@ -57,6 +58,7 @@ function rejected(reply: { code: (n: number) => { send: (body: object) => unknow
 export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient, cfg: Config): void {
   if (!cfg.saasEnabled) return;
   registerAccountRoutes(app, prisma, cfg);
+  app.get("/portal/api/plans", async () => getCatalog());
 
   app.post("/portal/api/auth/register", async (request, reply) => {
     if (!requireMutationHeader(request, reply)) return;
@@ -164,8 +166,8 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
         emailVerified: Boolean(account?.emailVerifiedAt)
       },
       workspace: { id: user.tenantId, name: user.tenantName, role: user.role },
-      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth },
-      subscription: { plan: limits.plan, status: limits.status },
+      limits: { groups: limits.groups, whatsappConnections: limits.whatsappConnections, unlimitedTextTranslations: true },
+      subscription: { plan: limits.plan, status: limits.status, billingInterval: limits.billingInterval },
       botPhoneNumber: cfg.SAAS_BOT_NUMBER ?? null,
       note: "Invite-only technical pilot; a linked WhatsApp bot is unofficial."
     };
@@ -187,7 +189,9 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
       where: { tenantId: user.tenantId },
       select: {
         id: true, name: true, whatsappGroupId: true, enabled: true,
-        gateway: true, targetLanguages: true, claimedAt: true, createdAt: true
+        gateway: true, targetLanguages: true, claimedAt: true, createdAt: true,
+        connectionId: true,
+        connection: { select: { label: true, kind: true, phoneLast4: true } }
       },
       orderBy: { createdAt: "desc" }
     });
@@ -301,8 +305,8 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
     }) : [];
     return {
       groups: memberGroups.length, messages: counter?.messages ?? 0,
-      limits: { groups: limits.groups, messagesPerMonth: limits.messagesPerMonth },
-      plan: { code: limits.plan, status: limits.status },
+      limits: { groups: limits.groups, whatsappConnections: limits.whatsappConnections, unlimitedTextTranslations: true },
+      plan: { code: limits.plan, status: limits.status, billingInterval: limits.billingInterval },
       recent
     };
   });
@@ -392,9 +396,9 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
         const claim = await tx.groupActivation.findUnique({
           where: { codeHash: digest(command.code.toUpperCase()) }
         });
-        if (!claim || claim.consumedAt || claim.expiresAt <= now) return null;
+        if (!claim || claim.connectionId || claim.consumedAt || claim.expiresAt <= now) return null;
         const existing = await tx.group.findUnique({
-          where: { whatsappGroupId: command.groupId }
+          where: { connectionKey_whatsappGroupId: { connectionKey: "shared", whatsappGroupId: command.groupId } }
         });
         // A group may never be silently moved between customer workspaces.
         if (existing && (existing.gateway !== "WEB" ||
@@ -406,7 +410,10 @@ export function registerPortalRoutes(app: FastifyInstance, prisma: PrismaClient,
           where: { tenantId: claim.tenantId }
         });
         if (limits && !planActive(limits, now)) return null;
-        const maxGroups = limits?.groupLimit ?? cfg.SAAS_MAX_GROUPS;
+        const maxGroups = commercialLimits(limits?.planCode ?? "PILOT", {
+          groupLimit: limits?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+          whatsappConnectionLimit: limits?.whatsappConnectionLimit ?? 0
+        }).groups;
         const count = await tx.group.count({ where: { tenantId: claim.tenantId } });
         if ((!existing || !existing.tenantId) && count >= maxGroups) return null;
         const consumed = await tx.groupActivation.updateMany({

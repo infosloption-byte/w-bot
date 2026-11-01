@@ -72,3 +72,36 @@ test("direct REST cannot disconnect a group assigned to a foreign tenant", async
   assert.deepEqual(where, { id: "A-group", tenantId: "B", gateway: "WEB" });
   await app.close();
 });
+
+test("tenant group listing includes customer number metadata and preserves tenant isolation", async () => {
+  let seenWhere: unknown;
+  let seenSelect: Record<string, unknown> | undefined;
+  const prisma = {
+    portalSession: { findUnique: async () => user("tenant-a") },
+    group: { findMany: async (args: {
+      where: unknown; select: Record<string, unknown>
+    }) => {
+      seenWhere = args.where;
+      seenSelect = args.select;
+      return [{
+        id: "group-owned-by-a", name: "Personal test group",
+        whatsappGroupId: "12345678901@g.us", gateway: "WEB", enabled: true,
+        connectionId: "test-connection-a",
+        connection: { label: "My personal phone", kind: "PERSONAL", phoneLast4: "4567" }
+      }];
+    } }
+  } as unknown as PrismaClient;
+  const app = Fastify();
+  registerPortalRoutes(app, prisma, cfg);
+  const response = await app.inject({
+    method: "GET", url: "/portal/api/groups",
+    headers: { cookie: SESSION_COOKIE + "=" + token }
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(seenWhere, { tenantId: "tenant-a" });
+  assert.deepEqual(seenSelect?.connection, {
+    select: { label: true, kind: true, phoneLast4: true }
+  });
+  assert.equal(response.json().groups[0].connection.kind, "PERSONAL");
+  await app.close();
+});

@@ -5,6 +5,7 @@ import { configuredLanguages, loadEnabledLanguages, normalizeLanguageCode, trans
 import { GoogleTranslationError, type TranslationProvider } from "./translation.js";
 import { GeminiApiError } from "./gemini.js";
 import { sendGatewayText, GatewayUnavailableError } from "./gateways.js";
+import { connectionTypeAllowed } from "./byon-shared.js";
 
 const MAX_ATTEMPTS = 3;
 
@@ -136,17 +137,28 @@ export async function processPending(prisma: PrismaClient, provider: Translation
       if (msg.group.tenantId) {
         const liveGroup = await prisma.group.findUnique({
           where: { id: msg.groupId },
-          select: { tenantId: true, enabled: true, claimedAt: true }
+          select: { tenantId: true, enabled: true, claimedAt: true, connectionId: true }
         });
         if (!liveGroup || !liveGroup.enabled ||
             liveGroup.tenantId !== msg.group.tenantId ||
-            liveGroup.claimedAt?.getTime() !== msg.group.claimedAt?.getTime()) {
+            liveGroup.claimedAt?.getTime() !== msg.group.claimedAt?.getTime() ||
+            liveGroup.connectionId !== msg.group.connectionId) {
           await prisma.message.update({
             where: { id: msg.id },
             data: { status: MessageStatus.COMPLETED, processedAt: new Date(), lastError: "Group ownership changed before send" }
           });
           processed++;
           continue;
+        }
+      }
+      if (msg.group.connectionId) {
+        const connection = await prisma.customerWhatsAppConnection.findUnique({
+          where: { id: msg.group.connectionId }
+        });
+        const policy = await prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } });
+        if (!connection || !connection.active || connection.status !== "CONNECTED" ||
+            !policy || !connectionTypeAllowed(policy, connection.kind)) {
+          throw new GatewayUnavailableError("WEB", "CUSTOMER_CONNECTION_DISABLED");
         }
       }
       const sendStarted = Date.now();
@@ -160,7 +172,8 @@ export async function processPending(prisma: PrismaClient, provider: Translation
         msg.group.gateway,
         msg.group.whatsappGroupId,
         output,
-        { messageId: msg.externalMessageId, senderId: msg.senderId, text: msg.originalText }
+        { messageId: msg.externalMessageId, senderId: msg.senderId, text: msg.originalText },
+        msg.group.connectionId
       ) : null;
       sendMs = Date.now() - sendStarted;
       await prisma.message.update({

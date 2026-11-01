@@ -4,23 +4,27 @@ import "./style.css";
 import "./responsive.css";
 import { useSidebar } from "./useSidebar.js";
 import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
+import { ByonConnections } from "./ByonConnections.js";
+import "./connections.css";
 
-type View = "overview" | "groups" | "activate" | "settings" | "activity";
+type View = "overview" | "groups" | "activate" | "connections" | "settings" | "activity";
 type Group = {
   id: string; name: string; whatsappGroupId: string;
   enabled: boolean; gateway: "WEB" | "OFFICIAL";
   targetLanguages: string[]; claimedAt: string | null;
+  connectionId?: string | null;
+  connection?: { label: string; kind: "PERSONAL" | "BUSINESS"; phoneLast4: string | null } | null;
 };
 type Me = {
   user: { name: string; email: string; emailVerified?: boolean };
   workspace: { name: string; id: string; role: string };
   botPhoneNumber: string | null;
-  limits: { groups: number; messagesPerMonth: number };
+  limits: { groups: number; whatsappConnections: number; unlimitedTextTranslations: boolean };
   note: string;
 };
 type Usage = {
   groups: number; messages: number;
-  limits: { groups: number; messagesPerMonth: number };
+  limits: { groups: number; whatsappConnections: number; unlimitedTextTranslations: boolean };
   recent: Array<{ id: string; status: string; sourceLanguage: string | null; createdAt: string; group: { name: string } }>;
 };
 type Language = { code: string; name: string };
@@ -47,6 +51,7 @@ function App() {
   const sidebar = useSidebar("wbot-customer-sidebar-collapsed");
   const [usage, setUsage] = useState<Usage | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [refreshingGroups, setRefreshingGroups] = useState(false);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [maxLanguages, setMaxLanguages] = useState(10);
   const [view, setView] = useState<View>("overview");
@@ -74,6 +79,27 @@ function App() {
     setLanguages(catalog.languages);
     setMaxLanguages(catalog.maxPerGroup);
   }, []);
+
+  const refreshGroups = useCallback(async () => {
+    const managed = await api<{ groups: Group[] }>("/groups");
+    setGroups(managed.groups);
+  }, []);
+  useEffect(() => {
+    if (!me || (view !== "groups" && view !== "overview")) return;
+    void refreshGroups().catch(() => { /* initial dashboard can still render */ });
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshGroups().catch(() => { /* next poll retries */ });
+      }
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [me?.workspace.id, view, refreshGroups]);
+  async function manualGroupRefresh() {
+    setRefreshingGroups(true);
+    try { await refreshGroups(); report("Your group list is up to date."); }
+    catch (err) { reportError(err); }
+    finally { setRefreshingGroups(false); }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -221,6 +247,7 @@ function App() {
     { id: "overview", label: "Overview", icon: "▦" },
     { id: "groups", label: "My Groups", icon: "☰" },
     { id: "activate", label: "Add Group", icon: "+" },
+    { id: "connections", label: "WhatsApp Numbers", icon: "♧" },
     { id: "settings", label: "Workspace", icon: "⚙" },
     { id: "activity", label: "Activity & Plan", icon: "◷" }
   ];
@@ -279,14 +306,14 @@ function App() {
           {view === "overview" && <>
             <div className="page-heading"><div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>Good to see you, {me.user.name.split(" ")[0]}.</h1><p className="muted">Your multilingual WhatsApp translation service at a glance.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add WhatsApp group</button></div>
             <div className="metrics">
-              <div className="metric"><div className="metric-label">ACTIVE GROUPS <span>▦</span></div><div className="metric-value">{groups.filter(g => g.enabled).length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
-              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}<small> / {me.limits.messagesPerMonth}</small></div><div className="meter"><span style={{ width: Math.min(100, (usage?.messages ?? 0) / me.limits.messagesPerMonth * 100) + "%" }}/></div></div>
+              <div className="metric"><div className="metric-label">REGISTERED GROUPS <span>▦</span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
+              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
               <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span>文</span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
             </div>
             <div className="two-column">
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => setView("groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
-                  <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · Web gateway</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
+                  <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
                 ) : <div className="empty">No groups yet. Use <button className="text-button" onClick={() => setView("activate")}>Add Group</button> to start.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
@@ -298,11 +325,15 @@ function App() {
           </>}
 
           {view === "groups" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Configure languages and translation availability independently for each group.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add group</button></div>
-            {!groups.length && <div className="panel empty large">No groups connected. Start by activating a group using your administrator account.<p><button className="button primary" onClick={() => setView("activate")}>Add your first group</button></p></div>}
+            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">All activated groups appear here, whether they use the shared bot or your own number. New activations refresh automatically.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}>{refreshingGroups ? "Refreshing…" : "↻ Refresh groups"}</button><button className="button primary" onClick={() => setView("connections")}>WhatsApp numbers</button></div></div>
+            {!groups.length && <div className="panel empty large">No groups connected yet. Activate one with the shared bot or your own WhatsApp number.<p><button className="button primary" onClick={() => setView("connections")}>Manage WhatsApp numbers</button></p></div>}
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
-                <div className="group-title"><div className="group-icon">♧</div><div className="grow"><h3>{group.name}</h3><small>WhatsApp Web · {group.whatsappGroupId}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
+                <div className="group-title"><div className="group-icon">♧</div><div className="grow"><h3>{group.name}</h3><small>{group.connection
+                    ? (group.connection.kind === "PERSONAL" ? "Personal" : "Business") +
+                      " number · " + group.connection.label +
+                      (group.connection.phoneLast4 ? " · ••••" + group.connection.phoneLast4 : "")
+                    : "Shared W-Bot number"} · {group.whatsappGroupId}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
                 <div className="section-label">TRANSLATION LANGUAGES · UP TO {maxLanguages}</div>
                 <p className="muted text-small">Select which platform-enabled languages this group should receive. More languages create longer WhatsApp replies.</p>
                 <div className="language-chips">{languages.map(lang => {
@@ -358,6 +389,16 @@ function App() {
           {view === "settings" && <>
             <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Workspace settings</h1><p className="muted">Your account and shared bot configuration.</p></div></div>
             <AccountSettings me={me} onRefresh={refresh} onLogout={logout}/>
+          </>}
+          {view === "connections" && <>
+            <div className="page-heading"><div>
+              <div className="eyebrow">WHATSAPP CONNECTIONS</div>
+              <h1>Your WhatsApp numbers</h1>
+              <p className="muted">Use the shared W-Bot or link an account you own. Each connection is isolated.</p>
+            </div></div>
+            <ByonConnections onManageGroups={() => {
+              setView("groups"); void refreshGroups().catch(reportError);
+            }}/>
           </>}
           {view === "activity" && <>
             <div className="page-heading"><div><div className="eyebrow">ACTIVITY & LIMITS</div><h1>Activity & subscription</h1><p className="muted">Group activation history, security changes and shared bot connectivity.</p></div></div>
