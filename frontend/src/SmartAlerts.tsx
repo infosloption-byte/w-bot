@@ -185,24 +185,47 @@ export function SmartAlerts() {
       <section className="panel">
         <div className="panel-heading"><h3>Groups to monitor</h3><span className="muted text-small">Read-only</span></div>
         <p className="muted text-small">Choose only groups that you are authorized to monitor. No private chats or historical messages.</p>
-        <label className="alert-field">Connected WhatsApp account
-          <select value={connectionId} disabled={!licensed} onChange={e=>{setConnectionId(e.target.value);setSelectedGroup("");}}>
-            <option value="">Choose account</option>
-            {connections.map(c=><option value={c.id} key={c.id}>{c.label}</option>)}
-          </select>
-        </label>
-        {connectionId && <label className="alert-field">Joined WhatsApp group
-          <select value={selectedGroup} disabled={!licensed} onChange={e=>setSelectedGroup(e.target.value)}>
-            <option value="">Choose group</option>
-            {discovered.map(group=><option key={group.groupId} value={group.groupId}>{group.name}</option>)}
-          </select>
-        </label>}
-        <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed}
-          onChange={e=>setConsent(e.target.checked)}/>
-          <span>I have authority to process this group's messages, participants have been informed, and I agree to limited private matching and retention.</span>
-        </label>
-        <button className="button primary" disabled={!licensed||!selectedGroup||!consent||busy}
-          onClick={()=>void addGroup()}>Monitor selected group</button>
+        <div className="alert-session-list">
+          {connections.map(c => <button key={c.id} type="button"
+            aria-pressed={connectionId === c.id} disabled={!licensed}
+            className={"alert-session" + (connectionId === c.id ? " is-selected" : "")}
+            onClick={() => setConnectionId(c.id)}>{c.label}</button>)}
+        </div>
+        {!connections.length && <p className="muted">No connected sessions available.</p>}
+        {connectionId && <>
+          <label className="alert-field">Find joined groups
+            <input type="search" placeholder="Find a group" value={groupSearch}
+              onChange={e => setGroupSearch(e.target.value)}/>
+          </label>
+          <div className="alert-group-toolbar">
+            <span className="muted">{groupsLoading ? "Loading…" : selectedGroups.length + " selected"}</span>
+            <button type="button" className="text-button" disabled={!licensed}
+              onClick={() => setSelectedGroups(discovered.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).map(g => g.groupId))}>Select shown</button>
+            <button type="button" className="text-button"
+              onClick={() => setSelectedGroups([])}>Clear</button>
+          </div>
+          <div className="alert-group-list">
+            {discovered.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).map(g => {
+              const monitored = sources.some(x => x.connectionId === connectionId
+                && x.whatsappGroupId === g.groupId && x.enabled);
+              return <label key={g.groupId} className="alert-group-option">
+                <input type="checkbox" disabled={!licensed || monitored}
+                  checked={monitored || selectedGroups.includes(g.groupId)}
+                  onChange={e => setSelectedGroups(current => e.target.checked
+                    ? [...current.filter(id => id !== g.groupId), g.groupId]
+                    : current.filter(id => id !== g.groupId))}/>
+                <span>{g.name}</span><small>{monitored ? "Active" : ""}</small>
+              </label>;
+            })}
+          </div>
+          <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed}
+            onChange={e => setConsent(e.target.checked)}/>
+            <span>I confirm I am authorized to monitor these groups and participants have been informed.</span>
+          </label>
+          <button type="button" className="button primary"
+            disabled={!licensed || !selectedGroups.length || !consent || busy}
+            onClick={() => void addGroups()}>Monitor {selectedGroups.length} selected group(s)</button>
+        </>}
         <div className="alert-items">{sources.map(source=><div className="alert-item" key={source.id}>
           <div><strong>{source.name}</strong><small>{source.enabled?"Monitoring":"Paused"}</small></div>
           <div className="alert-actions">
