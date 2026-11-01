@@ -167,6 +167,7 @@ export function SmartAlerts() {
       <div className="alert-usage">
         <div><strong>{usage?.groups ?? 0} / {usage?.limits?.groups ?? "—"}</strong><small>Monitored groups</small></div>
         <div><strong>{usage?.rules ?? 0} / {usage?.limits?.rules ?? "—"}</strong><small>Matching rules</small></div>
+        <div><strong>{usage?.analyses ?? 0} / {usage?.limits?.analysesPerMonth ?? "—"}</strong><small>AI analyses this month</small></div>
         <div><strong>{usage?.used ?? 0} / {usage?.limits?.matchesPerMonth ?? "—"}</strong><small>Monthly matches</small></div>
       </div>
       <div className="feature-actions">
@@ -177,6 +178,9 @@ export function SmartAlerts() {
           {features?.alerts.enabled?"Pause Smart Alerts":"Enable Smart Alerts"}
         </button>
       </div>
+      {features && !features.alertsAiReady && <p className="alert-ai-notice" role="status">
+        AI analysis is disabled on this server. The administrator must enable it before intelligent matching starts.
+      </p>}
       {!features?.alerts.active && <p className="muted text-small">
         A separate Smart Alerts subscription is required. No charges or checkout are available in this pilot.
       </p>}
