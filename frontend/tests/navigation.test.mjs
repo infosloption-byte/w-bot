@@ -54,7 +54,7 @@ test("settings pages, dashboard onboarding and shared theme are wired in both po
   assert.match(account, /section === "profile"/);
   assert.match(account, /section === "workspace"/);
   assert.match(account, /section === "security"/);
-  for (const token of ["Connected accounts", "Unread matches", "Your setup checklist", "Group Translation"])
+  for (const token of ["Connected accounts", "Unread matches", "Your setup checklist", "Group Translation", "What do you want W-Bot to do?", "Continue setup"])
     assert.ok(dashboard.includes(token), token);
   assert.match(customer, /import "\.\/theme-refresh\.css"/);
   assert.match(platform, /import "\.\/theme-refresh\.css"/);
