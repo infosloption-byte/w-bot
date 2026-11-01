@@ -406,11 +406,11 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
       return reply.code(403).send({ error: "Active subscription and connected account required" });
     const [watched, translation] = await Promise.all([
       prisma.watchGroup.findFirst({ where: {
-        tenantId: user.tenantId, connectionId: input.connectionId,
+        tenantId: user.tenantId,
         whatsappGroupId: input.groupId
       } }),
       prisma.group.findFirst({ where: {
-        tenantId: user.tenantId, connectionId: input.connectionId,
+        tenantId: user.tenantId,
         whatsappGroupId: input.groupId, enabled: true
       } })
     ]);
