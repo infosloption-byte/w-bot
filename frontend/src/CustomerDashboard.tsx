@@ -85,8 +85,8 @@ export function CustomerDashboard(props: {
         <div className="home-service-metadata"><span>{props.translationGroups} managed groups</span>
           <span>{summary?.features.translation.planCode ?? "No plan"}</span></div>
         <button className="button secondary" onClick={() => props.onNavigate(
-          summary?.features.translation.active ? "translation" : "plans",
-          summary?.features.translation.active ? "groups" : "translation")}>
+          readyTranslation ? "translation" : "plans",
+          readyTranslation ? "groups" : "translation")}>
           {readyTranslation ? "Manage translation" : "View translation setup"} <span aria-hidden="true">→</span>
         </button>
       </article>
@@ -100,8 +100,8 @@ export function CustomerDashboard(props: {
         <div className="home-service-metadata"><span>{summary?.searches ?? "—"} intelligent searches</span>
           <span>{summary?.features.alerts.planCode ?? "No plan"}</span></div>
         <button className="button secondary" onClick={() => props.onNavigate(
-          summary?.features.alerts.active ? "alerts" : "plans",
-          summary?.features.alerts.active ? (summary?.unread ? "inbox" : "searches") : "alerts")}>
+          readyAlerts ? "alerts" : "plans",
+          readyAlerts ? (summary?.unread ? "inbox" : "searches") : "alerts")}>
           {readyAlerts ? "Open Smart Alerts" : "View Smart Alerts setup"} <span aria-hidden="true">→</span>
         </button>
       </article>
@@ -126,7 +126,8 @@ export function CustomerDashboard(props: {
           <span aria-hidden="true">→</span>
         </button>
         <button className="home-check-item" onClick={() => props.onNavigate(
-          readyAlerts ? "alerts" : "translation", readyAlerts ? "groups" : "groups")}>
+          readyAlerts ? "alerts" : readyTranslation ? "translation" : "plans",
+          readyAlerts || readyTranslation ? "groups" : "translation")}>
           <span className={"home-check-dot" + (props.translationGroups || summary?.monitored ? " is-done" : "")}>
             {props.translationGroups || summary?.monitored ? "✓" : "3"}</span>
           <span><strong>Choose authorized groups</strong><small>Configure translation or monitored groups independently</small></span>
