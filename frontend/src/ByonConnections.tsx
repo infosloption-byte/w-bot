@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Icon } from "./Icon.js";
 
 type Kind = "PERSONAL" | "BUSINESS";
 type Connection = {
@@ -191,7 +192,7 @@ export function ByonConnections({
     {notice && <div className="alert success" role="status">{notice}</div>}
     {error && <div className="alert error" role="alert">{error}</div>}
     {!policy?.enabled && <div className="byon-notice" role="status">
-      <span aria-hidden="true">◈</span> Customer-owned numbers are currently disabled by Platform Admin.
+      <Icon name="info" size={16}/> Customer-owned numbers are currently disabled by Platform Admin.
       Existing shared W-Bot groups are unaffected.
     </div>}
     <div className={"byon-progress" + (mode === "pairing" ? "" : " is-hidden")} aria-label="Connection setup steps">
@@ -220,7 +221,7 @@ export function ByonConnections({
             aria-pressed={selected === c.id} onClick={() => {
               switchConnection(c.id); onNavigate?.("pairing");
             }}>
-            <span className="byon-number-icon" aria-hidden="true">☎</span>
+            <span className="byon-number-icon" aria-hidden="true"><Icon name="phone" size={20}/></span>
             <span className="byon-number-info"><strong>{c.label}</strong>
               <small>{c.kind === "PERSONAL" ? "Personal" : "WhatsApp Business App"}{c.phoneLast4 ? " · ••••" + c.phoneLast4 : ""}</small>
             </span>
@@ -233,7 +234,7 @@ export function ByonConnections({
             disabled={busy} onClick={() => setConfirmRevoke(c.id)}>Remove</button>
           </div>)}
           {!connections.length && <div className="byon-empty">
-            <div className="byon-empty-icon" aria-hidden="true">♧</div>
+            <div className="byon-empty-icon" aria-hidden="true"><Icon name="phone" size={26}/></div>
             <strong>No WhatsApp account added</strong>
             <p>Start by creating a connection. Your phone will authorize access in the next step.</p>
           </div>}
@@ -298,12 +299,12 @@ export function ByonConnections({
           </span>}
         </div>
         {!selected ? <div className="byon-empty byon-setup-empty">
-          <div className="byon-empty-icon" aria-hidden="true">⌁</div>
+          <div className="byon-empty-icon" aria-hidden="true"><Icon name="link" size={26}/></div>
           <strong>Select a WhatsApp number</strong>
           <p>Select an account on the left or create a new connection to start.</p>
         </div> : <>
           <div className="byon-current">
-            <span className="byon-current-icon" aria-hidden="true">◉</span>
+            <span className="byon-current-icon" aria-hidden="true"><Icon name="phone" size={18}/></span>
             <div><strong>{active?.label ?? "Your WhatsApp account"}</strong>
               <small>{active?.kind === "PERSONAL" ? "Personal WhatsApp" : "WhatsApp Business App"}
                 {active?.phoneLast4 ? " · ending " + active.phoneLast4 : ""}</small></div>
@@ -335,7 +336,7 @@ export function ByonConnections({
                       onClick={() => void copy(details.pairingCode!)}>Copy code</button>
                   </div>
                 : <div className="byon-placeholder" aria-live="polite">
-                    <span aria-hidden="true">⌗</span>
+                    <span aria-hidden="true"><Icon name="qr" size={32}/></span>
                     <strong>{expiresIn === 0 ? "Pairing code expired" :
                       details?.connection.status === "PAIRING" ? "Preparing secure pairing…" :
                       "Ready to pair your WhatsApp"}</strong>
@@ -378,7 +379,7 @@ export function ByonConnections({
                 onClick={() => void discover()}>{groupLoading ? "Loading groups…" : "View joined groups"}</button>
               {groupListLoaded && <div className="byon-group-list">
                 {groups.length ? groups.map(g => <div key={g.groupId} className="byon-group-item">
-                  <span aria-hidden="true">♧</span><span>{g.name}</span>
+                  <span aria-hidden="true"><Icon name="groups" size={16}/></span><span>{g.name}</span>
                   {g.activated && <span className="byon-group-activated">✓ {g.enabled ? "Activated" : "Paused"}</span>}
                 </div>) : <p className="muted text-small">No groups found. Add this account to a WhatsApp group first.</p>}
               </div>}

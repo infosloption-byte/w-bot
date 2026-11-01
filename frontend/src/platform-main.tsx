@@ -8,6 +8,9 @@ import { ByonAdmin } from "./ByonAdmin.js";
 import "./connections.css";
 import "./theme-refresh.css";
 import "./workspace-pages.css";
+import { Icon } from "./Icon.js";
+import { useTheme } from "./useTheme.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 
 type Admin = { id: string; name: string; email: string; role: "SUPER_ADMIN" | "VIEWER"; lastLoginAt: string | null };
 type Overview = { tenants: number; users: number; groups: number; enabledGroups: number;
@@ -63,6 +66,7 @@ const formatted = (value: string | null) => value ? new Date(value).toLocaleStri
 function Console() {
   const [admin, setAdmin] = useState<Admin | null>(null);
   const sidebar = useSidebar("wbot-platform-sidebar-collapsed");
+  const themeControl = useTheme();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -295,18 +299,19 @@ function Console() {
         <a className="platform-back" href="/portal/">Customer workspace</a>
       </div>
     </section>
+    <ThemeToggle className="auth-theme" theme={themeControl.theme} onToggle={themeControl.toggle}/>
   </main>;
 
   const nav: Array<{ key: View; label: string; icon: string }> = [
-    { key: "overview", label: "Overview", icon: "▦" },
-    { key: "tenants", label: "Customers", icon: "♧" },
-    { key: "users", label: "Users", icon: "♙" },
-    { key: "groups", label: "WhatsApp Groups", icon: "☷" },
-    { key: "numbers", label: "WhatsApp Numbers", icon: "♧" },
-    { key: "languages", label: "Languages", icon: "文" },
-    { key: "deliveries", label: "Delivery Issues", icon: "⚠" },
-    { key: "activity", label: "Audit & Activity", icon: "◷" },
-    { key: "security", label: "Admin Security", icon: "⚙" }
+    { key: "overview", label: "Overview", icon: "dashboard" },
+    { key: "tenants", label: "Customers", icon: "building" },
+    { key: "users", label: "Users", icon: "users" },
+    { key: "groups", label: "WhatsApp Groups", icon: "groups" },
+    { key: "numbers", label: "WhatsApp Numbers", icon: "phone" },
+    { key: "languages", label: "Languages", icon: "translate" },
+    { key: "deliveries", label: "Delivery Issues", icon: "warning" },
+    { key: "activity", label: "Audit & Activity", icon: "history" },
+    { key: "security", label: "Admin Security", icon: "shield" }
   ];
   return <div className={"dashboard platform-dashboard" + (sidebar.collapsed ? " nav-collapsed" : "")}>
     <button type="button" className={"sidebar-scrim" + (sidebar.mobileOpen ? " is-visible" : "")}
@@ -322,9 +327,9 @@ function Console() {
           aria-controls="platform-navigation"
             aria-label={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!sidebar.collapsed}>{sidebar.collapsed ? "»" : "«"}</button>
+          aria-expanded={!sidebar.collapsed}><Icon name={sidebar.collapsed ? "chevrons-right" : "chevrons-left"} size={18}/></button>
         <button type="button" className="sidebar-close" onClick={sidebar.closeMobile}
-          aria-label="Close menu" title="Close menu">×</button>
+          aria-label="Close menu" title="Close menu"><Icon name="close" size={20}/></button>
       </div>
       <p className="sidebar-label">OPERATIONS</p>
       <nav aria-label="Platform navigation">{nav.map(item =>
@@ -333,7 +338,7 @@ function Console() {
           aria-current={view === item.key ? "page" : undefined}
           className={"nav-item " + (view === item.key ? "active" : "")}
           onClick={() => { setView(item.key); setNotice(""); setError(""); sidebar.closeMobile(); }}>
-          <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
+          <span className="nav-icon" aria-hidden="true"><Icon name={item.icon} size={20}/></span><span className="nav-label">{item.label}</span>
         </button>
       )}</nav>
       <div className="sidebar-foot">
@@ -342,7 +347,7 @@ function Console() {
           <div className="profile-meta"><strong>{admin.name}</strong><small>{admin.role.replace("_", " ")}</small></div></div>
         <button type="button" aria-label="Sign out" title={sidebar.collapsed ? "Sign out" : undefined}
           className="nav-item signout" onClick={() => { sidebar.closeMobile(); void logout(); }}>
-          <span className="nav-icon" aria-hidden="true">↪</span><span className="nav-label">Sign out</span>
+          <span className="nav-icon" aria-hidden="true"><Icon name="logout" size={20}/></span><span className="nav-label">Sign out</span>
         </button>
       </div>
     </aside>
@@ -351,10 +356,13 @@ function Console() {
         <div className="topbar-start">
           <button type="button" className="sidebar-mobile-toggle" aria-label="Open platform menu"
             ref={sidebar.toggleRef} aria-controls="platform-navigation" aria-expanded={sidebar.mobileOpen}
-            onClick={sidebar.toggleMobile}>☰</button>
-          <div className="topbar-title"><span className="breadcrumb">PLATFORM / </span>{nav.find(n => n.key === view)?.label}</div>
+            onClick={sidebar.toggleMobile}><Icon name="menu" size={20}/></button>
+          <div className="topbar-title"><span className="breadcrumb">Platform /</span>{nav.find(n => n.key === view)?.label}</div>
         </div>
-        <div className="pill pilot">◉ ADMINISTRATION</div>
+        <div className="topbar-end">
+          <ThemeToggle theme={themeControl.theme} onToggle={themeControl.toggle}/>
+          <div className="pill pilot"><span className="live-dot"/>Administration</div>
+        </div>
       </header>
       <main className="workspace">
         {error && <div className="alert error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div>}
@@ -364,7 +372,7 @@ function Console() {
           <h1>{nav.find(n => n.key === view)?.label}</h1>
           <p className="muted">Monitor Translation and Smart Alerts subscriptions, WhatsApp connections and customer operations.</p>
         </div>
-          <button className="button secondary" disabled={busy} onClick={() => void refresh().catch(e => setError(String(e)))}>↻ Refresh</button>
+          <button className="button secondary" disabled={busy} onClick={() => void refresh().catch(e => setError(String(e)))}><Icon name="refresh" size={16}/> Refresh</button>
         </div>
         {view === "overview" && <><div className="platform-metrics">
           {[

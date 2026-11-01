@@ -7,6 +7,9 @@ import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } fro
 import { ByonConnections } from "./ByonConnections.js";
 import { FeatureHub, SmartAlerts } from "./SmartAlerts.js";
 import { CustomerDashboard, TranslationActivity } from "./CustomerDashboard.js";
+import { Icon } from "./Icon.js";
+import { useTheme } from "./useTheme.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 import "./theme-refresh.css";
 import "./workspace-pages.css";
 import "./connections.css";
@@ -58,6 +61,7 @@ async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
 function App() {
   const [me, setMe] = useState<Me | null>(null);
   const sidebar = useSidebar("wbot-customer-sidebar-collapsed");
+  const themeControl = useTheme();
   const [usage, setUsage] = useState<Usage | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [refreshingGroups, setRefreshingGroups] = useState(false);
@@ -207,7 +211,12 @@ function App() {
           <div className="eyebrow"><span className="live-dot" /> PRIVATE TECHNICAL PILOT</div>
           <h1>One workspace.<br/><em>Two smart services.</em><br/>Your groups.</h1>
           <p>Translate group conversations or monitor selected groups for relevant opportunities. Use the services you subscribe to with a shared account and WhatsApp connection.</p>
-          <div className="hero-features"><span>◉ Languages managed by platform</span><span>◉ Replies in context</span><span>◉ Group controls</span></div>
+          <div className="hero-features"><span><Icon name="check-circle" size={16}/> Languages managed by platform</span><span><Icon name="check-circle" size={16}/> Replies in context</span><span><Icon name="check-circle" size={16}/> Group controls</span></div>
+          <div className="auth-preview" aria-hidden="true">
+            <div className="preview-msg"><b>Group message · Spanish</b>Hola equipo, el envío llega mañana por la tarde.</div>
+            <div className="preview-msg"><b>W-Bot translation · English</b>Hi team, the shipment arrives tomorrow afternoon.</div>
+            <div className="preview-msg is-match"><b>Smart Alert match</b>Web design · Colombo · budget of at least 20,000 LKR</div>
+          </div>
         </div>
         <div className="auth-disclaimer">Invitation-only pilot · Unofficial WhatsApp Web connector · Group administrator consent required</div>
       </section>
@@ -225,7 +234,7 @@ function App() {
             <label>Email address<input name="email" type="email" required autoComplete="email" placeholder="you@company.com"/></label>
             {loginMode !== "forgot" && <label>Password<input name="password" type="password" required minLength={loginMode === "signup" ? 12 : 1} autoComplete={loginMode === "signup" ? "new-password" : "current-password"} placeholder={loginMode === "signup" ? "At least 12 characters" : "Your password"}/></label>}
             {loginMode === "signup" && <label>Invitation code<input name="inviteCode" type="password" required placeholder="Provided by W-Bot"/></label>}
-            <button type="submit" disabled={busy} className="button primary">{busy ? "Working…" : loginMode === "login" ? "Sign in" : loginMode === "forgot" ? "Send reset link" : "Create workspace"}<span>→</span></button>
+            <button type="submit" disabled={busy} className="button primary">{busy ? "Working…" : loginMode === "login" ? "Sign in" : loginMode === "forgot" ? "Send reset link" : "Create workspace"}<Icon name="arrow" size={16}/></button>
           </form>
           <div className="auth-switch">{loginMode === "login" ? "Invited to the pilot?" : "Already registered?"}{" "}
             <button type="button" className="text-button" onClick={() => { setLoginMode(loginMode === "login" ? "signup" : "login"); setError(""); }}>{loginMode === "login" ? "Create an account" : "Sign in"}</button>
@@ -235,16 +244,17 @@ function App() {
           </div>
         </div>
       </section>
+      <ThemeToggle className="auth-theme" theme={themeControl.theme} onToggle={themeControl.toggle}/>
     </main>
   );
 
   const nav: Array<{ id: View; label: string; icon: string }> = [
-    { id: "dashboard", label: "Dashboard", icon: "▦" },
-    { id: "translation", label: "Translation", icon: "文" },
-    { id: "alerts", label: "Smart Alerts", icon: "✳" },
-    { id: "connections", label: "WhatsApp Connections", icon: "♧" },
-    { id: "plans", label: "Plans & Usage", icon: "◷" },
-    { id: "settings", label: "Settings", icon: "⚙" }
+    { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+    { id: "translation", label: "Translation", icon: "translate" },
+    { id: "alerts", label: "Smart Alerts", icon: "alerts" },
+    { id: "connections", label: "WhatsApp Connections", icon: "phone" },
+    { id: "plans", label: "Plans & Usage", icon: "plans" },
+    { id: "settings", label: "Settings", icon: "settings" }
   ];
   const subnav: Partial<Record<View, Array<{ id: string; label: string }>>> = {
     translation: [
@@ -305,9 +315,9 @@ function App() {
             aria-controls="customer-navigation"
             aria-label={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={sidebar.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!sidebar.collapsed}>{sidebar.collapsed ? "»" : "«"}</button>
+            aria-expanded={!sidebar.collapsed}><Icon name={sidebar.collapsed ? "chevrons-right" : "chevrons-left"} size={18}/></button>
           <button type="button" className="sidebar-close" onClick={sidebar.closeMobile}
-            aria-label="Close menu" title="Close menu">×</button>
+            aria-label="Close menu" title="Close menu"><Icon name="close" size={20}/></button>
         </div>
         <p className="sidebar-label">MENU</p>
         <nav aria-label="Workspace navigation">{nav.map(item =>
@@ -316,7 +326,7 @@ function App() {
             aria-current={view === item.id ? "page" : undefined}
             className={"nav-item " + (view === item.id ? "active" : "")}
             onClick={() => { setView(item.id); setNotice(""); setError(""); sidebar.closeMobile(); }}>
-            <span className="nav-icon" aria-hidden="true">{item.icon}</span><span className="nav-label">{item.label}</span>
+            <span className="nav-icon" aria-hidden="true"><Icon name={item.icon} size={20}/></span><span className="nav-label">{item.label}</span>
           </button>
           {view === item.id && subnav[item.id] && <div className="sidebar-subnav" aria-label={item.label + " pages"}>
             {subnav[item.id]?.map(sub => <button type="button" key={sub.id}
@@ -331,7 +341,7 @@ function App() {
           <div className="profile"><div className="avatar">{me.user.name[0]?.toUpperCase()}</div><div className="profile-meta"><strong>{me.user.name}</strong><small>{me.workspace.name}</small></div></div>
           <button type="button" aria-label="Sign out" title={sidebar.collapsed ? "Sign out" : undefined}
             onClick={() => { sidebar.closeMobile(); void logout(); }} className="nav-item signout">
-            <span className="nav-icon" aria-hidden="true">↪</span><span className="nav-label">Sign out</span>
+            <span className="nav-icon" aria-hidden="true"><Icon name="logout" size={20}/></span><span className="nav-label">Sign out</span>
           </button>
         </div>
       </aside>
@@ -340,10 +350,13 @@ function App() {
           <div className="topbar-start">
             <button type="button" className="sidebar-mobile-toggle" aria-label="Open workspace menu"
               ref={sidebar.toggleRef} aria-controls="customer-navigation" aria-expanded={sidebar.mobileOpen}
-              onClick={sidebar.toggleMobile}>☰</button>
-            <div className="topbar-title"><span className="breadcrumb">WORKSPACE / </span><span>{nav.find(item => item.id === view)?.label}</span></div>
+              onClick={sidebar.toggleMobile}><Icon name="menu" size={20}/></button>
+            <div className="topbar-title"><span className="breadcrumb">Workspace /</span><span>{nav.find(item => item.id === view)?.label}</span></div>
           </div>
-          <div className="pill pilot">◉ INVITE-ONLY PILOT</div>
+          <div className="topbar-end">
+            <ThemeToggle theme={themeControl.theme} onToggle={themeControl.toggle}/>
+            <div className="pill pilot"><span className="live-dot"/>Invite-only pilot</div>
+          </div>
         </header>
         <main className="workspace">
           {view !== "dashboard" && <nav className="workspace-tabs" aria-label="Section pages">
@@ -364,14 +377,14 @@ function App() {
           {view === "translation" && translationTab === "overview" && <>
             <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Manage translated conversations and languages for your approved groups.</p></div><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage connections</button></div>
             <div className="metrics">
-              <div className="metric"><div className="metric-label">REGISTERED GROUPS <span>▦</span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
-              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
-              <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span>文</span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
+              <div className="metric"><div className="metric-label">REGISTERED GROUPS <span><Icon name="groups" size={18}/></span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
+              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span><Icon name="chat" size={18}/></span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
+              <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span><Icon name="translate" size={18}/></span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
             </div>
             <div className="two-column">
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
-                  <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
+                  <div className="group-line" key={group.id}><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
                 ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp Connections</button> to begin.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
@@ -383,11 +396,11 @@ function App() {
           </>}
 
           {view === "translation" && translationTab === "groups" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Manage translation languages and approved groups connected to your WhatsApp sessions.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}>{refreshingGroups ? "Refreshing…" : "↻ Refresh groups"}</button><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp accounts</button></div></div>
+            <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Manage translation languages and approved groups connected to your WhatsApp sessions.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}><Icon name="refresh" size={16}/>{refreshingGroups ? "Refreshing…" : "Refresh groups"}</button><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp accounts</button></div></div>
             {!groups.length && <div className="panel empty large">No translation groups activated yet. Link your WhatsApp account and request group activation.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage WhatsApp accounts</button></p></div>}
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
-                <div className="group-title"><div className="group-icon">♧</div><div className="grow"><h3>{group.name}</h3><small>{group.connection
+                <div className="group-title"><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><h3>{group.name}</h3><small>{group.connection
                     ? (group.connection.kind === "PERSONAL" ? "Personal" : "Business") +
                       " number · " + group.connection.label +
                       (group.connection.phoneLast4 ? " · ••••" + group.connection.phoneLast4 : "")
@@ -415,7 +428,7 @@ function App() {
                   <p className="alert error" role="alert">No enabled languages selected. Choose at least one language to resume translation.</p>}
                 <div className="group-footer"><div className="muted text-small"><button className="text-button danger-action" type="button" disabled={busy} onClick={() => setPendingDisconnect(group)}>Disconnect group</button>
                     <button className="text-button danger-action" type="button" disabled={busy}
-                      style={{ marginLeft: 18 }} onClick={() => setPendingHistoryDelete(group)}>Delete message history</button></div>
+                      onClick={() => setPendingHistoryDelete(group)}>Delete message history</button></div>
                   <button type="button" className={"toggle " + (group.enabled ? "is-on" : "")} aria-label={group.enabled ? "Pause group" : "Enable group"} aria-pressed={group.enabled} disabled={busy} onClick={() => void updateGroup(group, { enabled: !group.enabled })}><span/></button></div>
               </section>
             )}</div>

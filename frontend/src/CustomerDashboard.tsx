@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { portalRequest } from "./PortalAccount.js";
+import { Icon } from "./Icon.js";
 
 type Feature = { active: boolean; enabled: boolean; planCode: string | null; status: string };
 type Features = { translation: Feature; alerts: Feature };
@@ -55,7 +56,7 @@ export function CustomerDashboard(props: {
         <p>Manage your connected WhatsApp accounts, translations and intelligent alerts from one place.</p>
         <div className="home-hero-actions">
           <button className="button primary" onClick={() => props.onNavigate("connections", "accounts")}>
-            Manage WhatsApp connections <span aria-hidden="true">→</span>
+            Manage WhatsApp connections <Icon name="arrow" size={16}/>
           </button>
           <button className="button ghost" onClick={() => props.onNavigate("plans", "translation")}>
             View my services
@@ -68,16 +69,16 @@ export function CustomerDashboard(props: {
     {error && <div className="alert error" role="alert">{error}</div>}
 
     <div className="home-stat-grid">
-      <div className="home-stat"><span>Connected accounts</span><strong>{summary ? activeConnections : "—"}</strong><small>Authorized WhatsApp sessions</small></div>
-      <div className="home-stat"><span>Translation groups</span><strong>{props.translationGroups}</strong><small>{props.translations.toLocaleString()} messages this month</small></div>
-      <div className="home-stat"><span>Alert groups</span><strong>{summary?.monitored ?? "—"}</strong><small>Selected for private monitoring</small></div>
-      <div className="home-stat"><span>Unread matches</span><strong>{summary?.unread ?? "—"}</strong><small>From intelligent searches</small></div>
+      <div className="home-stat"><span className="home-stat-icon"><Icon name="phone" size={18}/></span><span>Connected accounts</span><strong>{summary ? activeConnections : "—"}</strong><small>Authorized WhatsApp sessions</small></div>
+      <div className="home-stat"><span className="home-stat-icon"><Icon name="translate" size={18}/></span><span>Translation groups</span><strong>{props.translationGroups}</strong><small>{props.translations.toLocaleString()} messages this month</small></div>
+      <div className="home-stat"><span className="home-stat-icon"><Icon name="groups" size={18}/></span><span>Alert groups</span><strong>{summary?.monitored ?? "—"}</strong><small>Selected for private monitoring</small></div>
+      <div className="home-stat"><span className="home-stat-icon"><Icon name="inbox" size={18}/></span><span>Unread matches</span><strong>{summary?.unread ?? "—"}</strong><small>From intelligent searches</small></div>
     </div>
 
     <div className="home-section-title"><div><div className="eyebrow">YOUR SERVICES</div><h2>What would you like to do?</h2></div></div>
     <div className="home-service-grid">
       <article className="home-service-card">
-        <div className="home-service-top"><span className="home-service-icon translation-icon" aria-hidden="true">文</span>
+        <div className="home-service-top"><span className="home-service-icon translation-icon" aria-hidden="true"><Icon name="translate" size={24}/></span>
           <span className={"home-service-status" + (readyTranslation ? " is-ready" : "")}>
             {readyTranslation ? "Enabled" : summary?.features.translation.active ? "Paused" : "Subscription required"}
           </span></div>
@@ -88,11 +89,11 @@ export function CustomerDashboard(props: {
         <button className="button secondary" onClick={() => props.onNavigate(
           readyTranslation ? "translation" : "plans",
           readyTranslation ? "groups" : "translation")}>
-          {readyTranslation ? "Manage translation" : "View translation setup"} <span aria-hidden="true">→</span>
+          {readyTranslation ? "Manage translation" : "View translation setup"} <Icon name="arrow" size={16}/>
         </button>
       </article>
       <article className="home-service-card">
-        <div className="home-service-top"><span className="home-service-icon alerts-icon" aria-hidden="true">✳</span>
+        <div className="home-service-top"><span className="home-service-icon alerts-icon" aria-hidden="true"><Icon name="alerts" size={24}/></span>
           <span className={"home-service-status" + (readyAlerts ? " is-ready" : "")}>
             {readyAlerts ? "Enabled" : summary?.features.alerts.active ? "Paused" : "Subscription required"}
           </span></div>
@@ -103,7 +104,7 @@ export function CustomerDashboard(props: {
         <button className="button secondary" onClick={() => props.onNavigate(
           readyAlerts ? "alerts" : "plans",
           readyAlerts ? (summary?.unread ? "inbox" : "searches") : "alerts")}>
-          {readyAlerts ? "Open Smart Alerts" : "View Smart Alerts setup"} <span aria-hidden="true">→</span>
+          {readyAlerts ? "Open Smart Alerts" : "View Smart Alerts setup"} <Icon name="arrow" size={16}/>
         </button>
       </article>
     </div>
@@ -142,20 +143,20 @@ export function CustomerDashboard(props: {
             }
             if (!activeConnections) { props.onNavigate("connections", "accounts"); return; }
             props.onNavigate(setupChoice === "translation" ? "translation" : "alerts", "groups");
-          }}>Continue setup <span aria-hidden="true">→</span></button>
+          }}>Continue setup <Icon name="arrow" size={16}/></button>
         </div>
       </div>
       <div className="home-checklist-items">
         <button className="home-check-item" onClick={() => props.onNavigate("connections", "accounts")}>
           <span className={"home-check-dot" + (activeConnections ? " is-done" : "")}>{activeConnections ? "✓" : "1"}</span>
           <span><strong>Connect your WhatsApp</strong><small>Link a number once for both services</small></span>
-          <span aria-hidden="true">→</span>
+          <span aria-hidden="true"><Icon name="arrow" size={18}/></span>
         </button>
         <button className="home-check-item" onClick={() => props.onNavigate("plans", "translation")}>
           <span className={"home-check-dot" + (readyTranslation || readyAlerts ? " is-done" : "")}>
             {readyTranslation || readyAlerts ? "✓" : "2"}</span>
           <span><strong>Enable the features you use</strong><small>Translation and Smart Alerts are licensed separately</small></span>
-          <span aria-hidden="true">→</span>
+          <span aria-hidden="true"><Icon name="arrow" size={18}/></span>
         </button>
         <button className="home-check-item" onClick={() => props.onNavigate(
           readyAlerts ? "alerts" : readyTranslation ? "translation" : "plans",
@@ -163,7 +164,7 @@ export function CustomerDashboard(props: {
           <span className={"home-check-dot" + (props.translationGroups || summary?.monitored ? " is-done" : "")}>
             {props.translationGroups || summary?.monitored ? "✓" : "3"}</span>
           <span><strong>Choose authorized groups</strong><small>Configure translation or monitored groups independently</small></span>
-          <span aria-hidden="true">→</span>
+          <span aria-hidden="true"><Icon name="arrow" size={18}/></span>
         </button>
       </div>
     </section>
