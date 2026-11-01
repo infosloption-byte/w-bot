@@ -15,7 +15,7 @@ type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCE
   groupLimit: number; whatsappConnectionLimit: number; billingInterval: "MONTHLY" | "YEARLY"; periodEnd: string | null };
 type AlertPlan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
   billingInterval: "MONTHLY" | "YEARLY"; enabled: boolean;
-  maxGroups: number; maxRules: number; maxMatchesPerMonth: number; periodEnd: string | null };
+  maxGroups: number; maxConnections: number; maxRules: number; maxMatchesPerMonth: number; periodEnd: string | null };
 type CatalogPlan = { code: string; name: string; monthlyCents: number; yearlyCents: number; whatsappConnections: number; groups: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
   memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null; alertSubscription: AlertPlan | null };
@@ -84,6 +84,7 @@ function Console() {
   const [alertStatus, setAlertStatus] = useState<AlertPlan["status"]>("TRIAL");
   const [alertInterval, setAlertInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
   const [alertGroups, setAlertGroups] = useState(3);
+  const [alertConnections, setAlertConnections] = useState(1);
   const [alertRules, setAlertRules] = useState(5);
   const [alertMatches, setAlertMatches] = useState(100);
   const [planCode, setPlanCode] = useState("PILOT");
@@ -183,6 +184,7 @@ function Console() {
     setAlertStatus(t.alertSubscription?.status ?? "TRIAL");
     setAlertInterval(t.alertSubscription?.billingInterval ?? "MONTHLY");
     setAlertGroups(t.alertSubscription?.maxGroups ?? 3);
+    setAlertConnections(t.alertSubscription?.maxConnections ?? 1);
     setAlertRules(t.alertSubscription?.maxRules ?? 5);
     setAlertMatches(t.alertSubscription?.maxMatchesPerMonth ?? 100);
     setError(""); setNotice("");
@@ -196,7 +198,7 @@ function Console() {
         method: "PATCH",
         body: JSON.stringify({
           planCode: alertCode, status: alertStatus, billingInterval: alertInterval,
-          maxGroups: alertGroups, maxRules: alertRules, maxMatchesPerMonth: alertMatches,
+          maxGroups: alertGroups, maxConnections: alertConnections, maxRules: alertRules, maxMatchesPerMonth: alertMatches,
           periodEnd: alertEditing.alertSubscription?.periodEnd ?? null
         })
       });
@@ -584,6 +586,8 @@ function Console() {
               onClick={()=>setAlertInterval(value)}>{value.toLowerCase()}</button>)}</div>
           <label>Monitored group limit<input type="number" min={1} max={500} value={alertGroups}
             onChange={e=>setAlertGroups(Number(e.target.value))}/></label>
+          <label>Linked WhatsApp accounts for Alerts<input type="number" min={1} max={100} value={alertConnections}
+            onChange={e=>setAlertConnections(Number(e.target.value))}/></label>
           <label>Saved rules limit<input type="number" min={1} max={500} value={alertRules}
             onChange={e=>setAlertRules(Number(e.target.value))}/></label>
           <label>Matches per month<input type="number" min={1} max={100000} value={alertMatches}

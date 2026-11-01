@@ -35,6 +35,7 @@ const alertSubscriptionChange = z.object({
   status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
   billingInterval: z.enum(["MONTHLY", "YEARLY"]).default("MONTHLY"),
   maxGroups: z.number().int().min(1).max(500),
+  maxConnections: z.number().int().min(1).max(100),
   maxRules: z.number().int().min(1).max(500),
   maxMatchesPerMonth: z.number().int().min(1).max(100_000),
   periodEnd: z.string().datetime().nullable().optional()
@@ -199,7 +200,7 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         _count: { select: { groups: true, members: true } },
         alertSubscription: {
           select: { planCode: true, status: true, enabled: true, billingInterval: true,
-            maxGroups: true, maxRules: true, maxMatchesPerMonth: true, periodEnd: true }
+            maxGroups: true, maxConnections: true, maxRules: true, maxMatchesPerMonth: true, periodEnd: true }
         },
         subscription: {
           select: {
@@ -467,7 +468,6 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         tx.watchRule.count({ where: { tenantId: tenant.id } })
       ]);
       if (groups > input.maxGroups || rules > input.maxRules) return null;
-      const current = await tx.alertSubscription.findUnique({ where: { tenantId: tenant.id } });
       const record = await tx.alertSubscription.upsert({
         where: { tenantId: tenant.id },
         create: { tenantId: tenant.id, ...input, enabled: false,
@@ -485,7 +485,7 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
     return { saved: true, subscription: {
       planCode: subscription.planCode, status: subscription.status,
       billingInterval: subscription.billingInterval, enabled: subscription.enabled,
-      maxGroups: subscription.maxGroups, maxRules: subscription.maxRules,
+      maxGroups: subscription.maxGroups, maxConnections: subscription.maxConnections, maxRules: subscription.maxRules,
       maxMatchesPerMonth: subscription.maxMatchesPerMonth, periodEnd: subscription.periodEnd
     }, billingEnabled: false };
   });

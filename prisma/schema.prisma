@@ -315,6 +315,7 @@ model AlertSubscription {
   billingInterval   BillingInterval @default(MONTHLY)
   enabled           Boolean  @default(false)
   maxGroups         Int      @default(3)
+  maxConnections    Int      @default(1)
   maxRules          Int      @default(5)
   maxMatchesPerMonth Int     @default(100)
   periodEnd         DateTime?

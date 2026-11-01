@@ -61,7 +61,7 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
         active: !!alerts && planActive(alerts),
         planCode: alerts?.planCode ?? null, status: alerts?.status ?? "NOT_SUBSCRIBED",
         limits: alerts ? {
-          groups: alerts.maxGroups, rules: alerts.maxRules, matchesPerMonth: alerts.maxMatchesPerMonth
+          groups: alerts.maxGroups, connections: alerts.maxConnections, rules: alerts.maxRules, matchesPerMonth: alerts.maxMatchesPerMonth
         } : null
       }
     };
