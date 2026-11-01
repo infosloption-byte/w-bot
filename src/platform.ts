@@ -38,6 +38,7 @@ const alertSubscriptionChange = z.object({
   maxConnections: z.number().int().min(1).max(100),
   maxRules: z.number().int().min(1).max(500),
   maxMatchesPerMonth: z.number().int().min(1).max(100_000),
+  maxAnalysesPerMonth: z.number().int().min(1).max(100_000).default(500),
   periodEnd: z.string().datetime().nullable().optional()
 }).strict();
 const languageName = z.string().trim().min(2).max(80)
@@ -200,7 +201,7 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
         _count: { select: { groups: true, members: true } },
         alertSubscription: {
           select: { planCode: true, status: true, enabled: true, billingInterval: true,
-            maxGroups: true, maxConnections: true, maxRules: true, maxMatchesPerMonth: true, periodEnd: true }
+            maxGroups: true, maxConnections: true, maxRules: true, maxMatchesPerMonth: true, maxAnalysesPerMonth: true, periodEnd: true }
         },
         subscription: {
           select: {
@@ -486,7 +487,8 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
       planCode: subscription.planCode, status: subscription.status,
       billingInterval: subscription.billingInterval, enabled: subscription.enabled,
       maxGroups: subscription.maxGroups, maxConnections: subscription.maxConnections, maxRules: subscription.maxRules,
-      maxMatchesPerMonth: subscription.maxMatchesPerMonth, periodEnd: subscription.periodEnd
+      maxMatchesPerMonth: subscription.maxMatchesPerMonth,
+      maxAnalysesPerMonth: subscription.maxAnalysesPerMonth, periodEnd: subscription.periodEnd
     }, billingEnabled: false };
   });
 
