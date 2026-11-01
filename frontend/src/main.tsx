@@ -19,12 +19,12 @@ type Me = {
   user: { name: string; email: string; emailVerified?: boolean };
   workspace: { name: string; id: string; role: string };
   botPhoneNumber: string | null;
-  limits: { groups: number; messagesPerMonth: number };
+  limits: { groups: number; whatsappConnections: number; unlimitedTextTranslations: boolean };
   note: string;
 };
 type Usage = {
   groups: number; messages: number;
-  limits: { groups: number; messagesPerMonth: number };
+  limits: { groups: number; whatsappConnections: number; unlimitedTextTranslations: boolean };
   recent: Array<{ id: string; status: string; sourceLanguage: string | null; createdAt: string; group: { name: string } }>;
 };
 type Language = { code: string; name: string };
@@ -306,8 +306,8 @@ function App() {
           {view === "overview" && <>
             <div className="page-heading"><div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>Good to see you, {me.user.name.split(" ")[0]}.</h1><p className="muted">Your multilingual WhatsApp translation service at a glance.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add WhatsApp group</button></div>
             <div className="metrics">
-              <div className="metric"><div className="metric-label">ACTIVE GROUPS <span>▦</span></div><div className="metric-value">{groups.filter(g => g.enabled).length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
-              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}<small> / {me.limits.messagesPerMonth}</small></div><div className="meter"><span style={{ width: Math.min(100, (usage?.messages ?? 0) / me.limits.messagesPerMonth * 100) + "%" }}/></div></div>
+              <div className="metric"><div className="metric-label">REGISTERED GROUPS <span>▦</span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
+              <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
               <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span>文</span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
             </div>
             <div className="two-column">

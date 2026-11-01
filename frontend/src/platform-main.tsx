@@ -12,7 +12,8 @@ type Overview = { tenants: number; users: number; groups: number; enabledGroups:
   messagesThisMonth: number; queued: number; failures: number; uncertain: number;
   gateway: { status: string; checkedAt: string | null; changedAt: string | null } };
 type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
-  groupLimit: number; monthlyMessages: number; whatsappConnectionLimit: number; periodEnd: string | null };
+  groupLimit: number; whatsappConnectionLimit: number; billingInterval: "MONTHLY" | "YEARLY"; periodEnd: string | null };
+type CatalogPlan = { code: string; name: string; monthlyCents: number; yearlyCents: number; whatsappConnections: number; groups: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
   memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null };
 type Group = { id: string; name: string; enabled: boolean; gateway: string;
@@ -78,24 +79,31 @@ function Console() {
   const [planCode, setPlanCode] = useState("PILOT");
   const [planStatus, setPlanStatus] = useState<Plan["status"]>("TRIAL");
   const [groupLimit, setGroupLimit] = useState(3);
-  const [monthlyMessages, setMonthlyMessages] = useState(1000);
+  const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [pricingPlans, setPricingPlans] = useState<CatalogPlan[]>([]);
   const [whatsappConnectionLimit, setWhatsappConnectionLimit] = useState(0);
   const [pendingGroup, setPendingGroup] = useState<Group | null>(null);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
   const refresh = useCallback(async () => {
-    const [summary, tenantData, userData, groupData, languageData, failures, actions] = await Promise.all([
+    const [summary, tenantData, userData, groupData, languageData, failures, actions, pricing] = await Promise.all([
       platformApi<Overview>("/overview"),
       platformApi<{ tenants: Tenant[] }>("/tenants"),
       platformApi<{ users: CustomerUser[] }>("/users"),
       platformApi<{ groups: Group[] }>("/groups"),
       platformApi<{ languages: CatalogLanguage[] }>("/languages"),
       platformApi<{ messages: Delivery[] }>("/deliveries"),
-      platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity")
+      platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity"),
+      fetch("/portal/api/plans", { credentials: "same-origin", cache: "no-store" })
+        .then(async res => {
+          if (!res.ok) throw Error("Pricing catalog unavailable");
+          return await res.json() as { plans: CatalogPlan[] };
+        })
     ]);
     setOverview(summary); setTenants(tenantData.tenants); setUsers(userData.users); setGroups(groupData.groups);
     setCatalog(languageData.languages);
+    setPricingPlans(pricing.plans);
     setDeliveries(failures.messages);
     setActivity(actions.events); setPlatformActivity(actions.platformEvents);
   }, []);
@@ -135,7 +143,7 @@ function Console() {
     setPlanCode(t.subscription?.planCode ?? "PILOT");
     setPlanStatus(t.subscription?.status ?? "TRIAL");
     setGroupLimit(t.subscription?.groupLimit ?? 3);
-    setMonthlyMessages(t.subscription?.monthlyMessages ?? 1000);
+    setBillingInterval(t.subscription?.billingInterval ?? "MONTHLY");
     setWhatsappConnectionLimit(t.subscription?.whatsappConnectionLimit ?? 0);
     setNotice(""); setError("");
   }
@@ -148,12 +156,13 @@ function Console() {
       await platformApi("/tenants/" + encodeURIComponent(editing.id) + "/subscription", {
         method: "PATCH",
         body: JSON.stringify({
-          planCode, status: planStatus, groupLimit, monthlyMessages, whatsappConnectionLimit,
+          planCode, billingInterval, status: planStatus,
+          ...(planCode === "PILOT" ? { groupLimit, whatsappConnectionLimit } : {}),
           periodEnd: editing.subscription?.periodEnd ?? null
         })
       });
       setEditing(null); await refresh();
-      setNotice("Workspace subscription updated. Change recorded in platform audit.");
+      setNotice("Workspace plan and billing interval saved. This is an administrative assignment, not a Paddle charge.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save plan"); }
     finally { setBusy(false); }
   }
@@ -346,7 +355,7 @@ function Console() {
             <td data-label="Owner">{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
             <td data-label="Groups">{t.groupCount}</td>
             <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
-            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} / {t.subscription?.monthlyMessages ?? "—"}</td>
+            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} messages (unlimited)</td>
             <td data-label="Action">{admin.role === "SUPER_ADMIN" &&
               <button className="text-button" onClick={() => editPlan(t)}>Manage plan</button>}</td>
           </tr>)}</tbody></table></div>
@@ -470,17 +479,42 @@ function Console() {
         role="dialog" aria-modal="true" aria-labelledby="plan-title">
         <div className="eyebrow">WORKSPACE SUBSCRIPTION</div>
         <h2 id="plan-title">Manage {editing.name}</h2>
+        {error && <div className="alert error" role="alert">{error}</div>}
         <p className="muted">This pilot does not process payments. Changes affect plan enforcement immediately.</p>
         <form className="form" onSubmit={e => void savePlan(e)}>
-          <label>Plan code<input value={planCode} pattern="[A-Z0-9_-]{2,30}" onChange={e => setPlanCode(e.target.value.toUpperCase())}/></label>
+          <div className="platform-label">Choose subscription</div>
+          <div className="wbot-plan-picker" role="group" aria-label="Subscription plans">
+            {pricingPlans.map(plan => <button type="button" key={plan.code}
+              className={"wbot-plan-choice" + (planCode === plan.code ? " is-selected" : "")}
+              aria-pressed={planCode === plan.code} onClick={() => {
+                setPlanCode(plan.code); setGroupLimit(plan.groups);
+                setWhatsappConnectionLimit(plan.whatsappConnections);
+              }}>
+              <strong>{plan.name}</strong>
+              <span>{plan.whatsappConnections} numbers · {plan.groups} groups</span>
+              <b>${(billingInterval === "YEARLY" ? plan.yearlyCents : plan.monthlyCents) / 100}/{billingInterval === "YEARLY" ? "year" : "month"}</b>
+            </button>)}
+            <button type="button" className={"wbot-plan-choice" + (planCode === "PILOT" ? " is-selected" : "")}
+              aria-pressed={planCode === "PILOT"} onClick={() => setPlanCode("PILOT")}>
+              <strong>Pilot</strong><span>Existing internal workspace</span><b>Unbilled</b>
+            </button>
+          </div>
+          <div className="platform-label">Billing frequency</div>
+          <div className="language-chips">{(["MONTHLY","YEARLY"] as const).map(value =>
+            <button type="button" key={value} aria-pressed={billingInterval === value}
+              className={"chip " + (billingInterval === value ? "selected" : "")}
+              onClick={() => setBillingInterval(value)}>{value === "MONTHLY" ? "Monthly" : "Yearly · save 2 months"}</button>)}</div>
+          <p className="muted text-small">Unlimited text translations on every plan. Commercial limits are set by the catalog and cannot be manually overridden. This interface does not collect payment.</p>
           <div className="platform-label">Subscription status</div>
           <div className="language-chips">{(["TRIAL","ACTIVE","PAST_DUE","CANCELED"] as const).map(status =>
             <button type="button" key={status} className={"chip " + (planStatus === status ? "selected" : "")}
               aria-pressed={planStatus === status} onClick={() => setPlanStatus(status)}>{status.replace("_"," ")}</button>)}</div>
-          <label>Maximum groups<input type="number" min={0} max={1000} value={groupLimit} onChange={e => setGroupLimit(Number(e.target.value))}/></label>
-          <label>Monthly messages<input type="number" min={0} max={1000000} value={monthlyMessages} onChange={e => setMonthlyMessages(Number(e.target.value))}/></label>
-           <label>WhatsApp connections (0 = unlimited)<input type="number" min={0} max={1000}
-             value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
+          {planCode === "PILOT" && <div className="wbot-pilot-fields">
+            <label>Pilot group slots<input type="number" min={0} max={1000} value={groupLimit}
+              onChange={e => setGroupLimit(Number(e.target.value))}/></label>
+            <label>Pilot WhatsApp connections (0 = unlimited)<input type="number" min={0} max={1000}
+              value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
+          </div>}
           <div className="modal-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
             <button className="button primary" disabled={busy} type="submit">Save subscription</button></div>
         </form>

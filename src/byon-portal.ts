@@ -6,6 +6,7 @@ import type { Config } from "./config.js";
 import { requirePortalAuth, requireMutationHeader, allowAttempt, digest } from "./portal-auth.js";
 import { byonAuthorized, byonRequest, connectionKey, connectionTypeAllowed, isConnectionId } from "./byon-shared.js";
 import { getTenantLimits, planActive } from "./quotas.js";
+import { commercialLimits } from "./plans.js";
 import { loadEnabledLanguages, defaultGroupLanguages } from "./languages.js";
 import { isWebGroupId } from "./gateways.js";
 
@@ -40,10 +41,14 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       }),
       prisma.tenantSubscription.findUnique({
         where: { tenantId: user.tenantId },
-        select: { whatsappConnectionLimit: true, groupLimit: true }
+        select: { planCode: true, whatsappConnectionLimit: true, groupLimit: true }
       })
     ]);
-    const planLimit = plan?.whatsappConnectionLimit ?? 0;
+    const allowance = commercialLimits(plan?.planCode ?? "PILOT", {
+      groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+      whatsappConnectionLimit: plan?.whatsappConnectionLimit ?? 0
+    });
+    const planLimit = allowance.whatsappConnections;
     const effectiveLimit = [rules.maxConnectionsPerTenant, planLimit]
       .filter(limit => limit > 0);
     const maxConnections = effectiveLimit.length ? Math.min(...effectiveLimit) : 0;
@@ -52,7 +57,7 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       enabled: cfg.BYON_GATEWAY_ENABLED === "true" && rules.customerNumbersEnabled,
       personalEnabled: rules.personalEnabled, businessEnabled: rules.businessEnabled,
       maxConnections, planConnections: planLimit,
-      groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+      groupLimit: allowance.groups,
       groupCount: activeGroups
     }, connections };
   });
@@ -74,7 +79,10 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
         where: { tenantId: user.tenantId, active: true }
       });
       const globalLimit = rules.maxConnectionsPerTenant;
-      const planLimit = plan?.whatsappConnectionLimit ?? 0;
+      const planLimit = commercialLimits(plan?.planCode ?? "PILOT", {
+        groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+        whatsappConnectionLimit: plan?.whatsappConnectionLimit ?? 0
+      }).whatsappConnections;
       if ((globalLimit > 0 && count >= globalLimit) ||
           (planLimit > 0 && count >= planLimit)) return "LIMIT" as const;
       const record = await tx.customerWhatsAppConnection.create({
@@ -289,7 +297,11 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       });
       if (existing && existing.tenantId && existing.tenantId !== conn.tenantId) return false;
       const used = await tx.group.count({ where: { tenantId: conn.tenantId } });
-      if ((!existing || !existing.tenantId) && used >= (plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS)) return false;
+      const maxGroups = commercialLimits(plan?.planCode ?? "PILOT", {
+        groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+        whatsappConnectionLimit: plan?.whatsappConnectionLimit ?? 0
+      }).groups;
+      if ((!existing || !existing.tenantId) && used >= maxGroups) return false;
       const consumed = await tx.groupActivation.updateMany({
         where: { id: claim.id, consumedAt: null, expiresAt: { gt: now } },
         data: { consumedAt: now }

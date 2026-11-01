@@ -160,6 +160,11 @@ model TenantUsage {
   @@id([tenantId, month])
 }
 
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
@@ -171,6 +176,7 @@ model TenantSubscription {
   tenantId       String  @id @db.VarChar(191)
   tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   planCode       String  @default("PILOT") @db.VarChar(30)
+  billingInterval BillingInterval @default(MONTHLY)
   status         SubscriptionStatus @default(TRIAL)
   groupLimit     Int     @default(3)
   monthlyMessages Int   @default(1000)
