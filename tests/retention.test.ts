@@ -6,6 +6,7 @@ import { loadConfig } from "../src/config.js";
 test("retention purges completed message history in bounded batches", async () => {
   let messageWhere: unknown;
   let deleted: unknown;
+  let deletedOldWatchEvents: unknown;
   const db = {
     message: {
       findMany: async (args: { where: unknown; take: number }) => {
@@ -19,7 +20,18 @@ test("retention purges completed message history in bounded batches", async () =
     portalSession: { deleteMany: async () => ({ count: 0 }) },
     platformSession: { deleteMany: async () => ({ count: 0 }) },
     groupActivation: { deleteMany: async () => ({ count: 0 }) },
-    tenantAudit: { deleteMany: async () => ({ count: 0 }) }
+    tenantAudit: { deleteMany: async () => ({ count: 0 }) },
+    watchEvent: {
+      findMany: async (args: { where: { createdAt: { lt: Date } }; take: number }) => {
+        assert.equal(args.take, 250);
+        assert.ok(args.where.createdAt.lt instanceof Date);
+        return [{ id: "watch-old" }];
+      },
+      deleteMany: async (args: unknown) => {
+        deletedOldWatchEvents = args;
+        return { count: 1 };
+      }
+    }
   };
   const cfg = loadConfig({
     DATABASE_URL: "mysql://u:p@localhost:3306/wbot",
@@ -30,4 +42,5 @@ test("retention purges completed message history in bounded batches", async () =
   assert.equal(await runRetention(db as never, cfg), 2);
   assert.deepEqual(deleted, { where: { id: { in: ["m1","m2"] } } });
   assert.ok(messageWhere);
+  assert.deepEqual(deletedOldWatchEvents, { where: { id: { in: ["watch-old"] } } });
 });
