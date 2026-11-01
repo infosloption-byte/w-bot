@@ -23,3 +23,11 @@ test("WhatsApp notifications require explicit customer opt-in and selected group
   assert.ok(notify.includes('},"PUT")'));
   assert.ok(notify.includes("!connectionId||!groupId||!consent||busy"));
 });
+
+test("source sender phone is shown distinctly from any contact typed in the message",()=>{
+  assert.ok(inbox.includes("Message sender:"));
+  assert.ok(inbox.includes("Original sender (WhatsApp)"));
+  assert.ok(inbox.includes("Copy sender number"));
+  assert.ok(inbox.includes("Contact mentioned inside the message"));
+  assert.ok(inbox.includes("Number unavailable"));
+});
