@@ -139,13 +139,18 @@ export async function processPending(prisma: PrismaClient, provider: Translation
           where: { id: msg.groupId },
           select: { tenantId: true, enabled: true, claimedAt: true, connectionId: true }
         });
+        const subscription = await prisma.tenantSubscription.findUnique({
+          where: { tenantId: msg.group.tenantId },
+          select: { translationEnabled: true }
+        });
         if (!liveGroup || !liveGroup.enabled ||
+            subscription?.translationEnabled === false ||
             liveGroup.tenantId !== msg.group.tenantId ||
             liveGroup.claimedAt?.getTime() !== msg.group.claimedAt?.getTime() ||
             liveGroup.connectionId !== msg.group.connectionId) {
           await prisma.message.update({
             where: { id: msg.id },
-            data: { status: MessageStatus.COMPLETED, processedAt: new Date(), lastError: "Group ownership changed before send" }
+            data: { status: MessageStatus.COMPLETED, processedAt: new Date(), lastError: "Group ownership or translation feature changed before send" }
           });
           processed++;
           continue;

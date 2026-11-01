@@ -13,9 +13,12 @@ type Overview = { tenants: number; users: number; groups: number; enabledGroups:
   gateway: { status: string; checkedAt: string | null; changedAt: string | null } };
 type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
   groupLimit: number; whatsappConnectionLimit: number; billingInterval: "MONTHLY" | "YEARLY"; periodEnd: string | null };
+type AlertPlan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+  billingInterval: "MONTHLY" | "YEARLY"; enabled: boolean;
+  maxGroups: number; maxConnections: number; maxRules: number; maxMatchesPerMonth: number; periodEnd: string | null };
 type CatalogPlan = { code: string; name: string; monthlyCents: number; yearlyCents: number; whatsappConnections: number; groups: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
-  memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null };
+  memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null; alertSubscription: AlertPlan | null };
 type Group = { id: string; name: string; enabled: boolean; gateway: string;
   updatedAt: string; claimedAt: string | null; tenant: { id: string; name: string } | null;
   targetLanguages: unknown; _count: { messages: number } };
@@ -76,6 +79,14 @@ function Console() {
   const [platformActivity, setPlatformActivity] = useState<Audit[]>([]);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Tenant | null>(null);
+  const [alertEditing, setAlertEditing] = useState<Tenant | null>(null);
+  const [alertCode, setAlertCode] = useState("ALERTS_PILOT");
+  const [alertStatus, setAlertStatus] = useState<AlertPlan["status"]>("TRIAL");
+  const [alertInterval, setAlertInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [alertGroups, setAlertGroups] = useState(3);
+  const [alertConnections, setAlertConnections] = useState(1);
+  const [alertRules, setAlertRules] = useState(5);
+  const [alertMatches, setAlertMatches] = useState(100);
   const [planCode, setPlanCode] = useState("PILOT");
   const [planStatus, setPlanStatus] = useState<Plan["status"]>("TRIAL");
   const [groupLimit, setGroupLimit] = useState(3);
@@ -164,6 +175,36 @@ function Console() {
       setEditing(null); await refresh();
       setNotice("Workspace plan and billing interval saved. This is an administrative assignment, not a Paddle charge.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save plan"); }
+    finally { setBusy(false); }
+  }
+
+  function editAlertPlan(t: Tenant) {
+    setAlertEditing(t);
+    setAlertCode(t.alertSubscription?.planCode ?? "ALERTS_PILOT");
+    setAlertStatus(t.alertSubscription?.status ?? "TRIAL");
+    setAlertInterval(t.alertSubscription?.billingInterval ?? "MONTHLY");
+    setAlertGroups(t.alertSubscription?.maxGroups ?? 3);
+    setAlertConnections(t.alertSubscription?.maxConnections ?? 1);
+    setAlertRules(t.alertSubscription?.maxRules ?? 5);
+    setAlertMatches(t.alertSubscription?.maxMatchesPerMonth ?? 100);
+    setError(""); setNotice("");
+  }
+  async function saveAlertPlan(event: React.FormEvent) {
+    event.preventDefault();
+    if (!alertEditing) return;
+    setBusy(true); setError("");
+    try {
+      await platformApi("/tenants/" + encodeURIComponent(alertEditing.id) + "/alerts/subscription", {
+        method: "PATCH",
+        body: JSON.stringify({
+          planCode: alertCode, status: alertStatus, billingInterval: alertInterval,
+          maxGroups: alertGroups, maxConnections: alertConnections, maxRules: alertRules, maxMatchesPerMonth: alertMatches,
+          periodEnd: alertEditing.alertSubscription?.periodEnd ?? null
+        })
+      });
+      setAlertEditing(null); await refresh();
+      setNotice("Smart Alerts entitlement updated separately. No payment has been collected.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to update alert subscription"); }
     finally { setBusy(false); }
   }
 
@@ -354,10 +395,15 @@ function Console() {
             <td data-label="Workspace"><strong>{t.name}</strong><small>{formatted(t.createdAt)}</small></td>
             <td data-label="Owner">{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
             <td data-label="Groups">{t.groupCount}</td>
-            <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
+            <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span>
+              <small>Translation: {t.subscription?.planCode ?? "PILOT"}</small>
+              <small>Alerts: {t.alertSubscription?.status ?? "Not subscribed"}</small></td>
             <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} messages (unlimited)</td>
             <td data-label="Action">{admin.role === "SUPER_ADMIN" &&
-              <button className="text-button" onClick={() => editPlan(t)}>Manage plan</button>}</td>
+              <div className="alert-actions">
+                <button className="text-button" onClick={() => editPlan(t)}>Translation plan</button>
+                <button className="text-button" onClick={() => editAlertPlan(t)}>Smart Alerts plan</button>
+              </div>}</td>
           </tr>)}</tbody></table></div>
           {!filteredTenants.length && <p className="muted">No matching customers.</p>}
         </section>}
@@ -517,6 +563,39 @@ function Console() {
           </div>}
           <div className="modal-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
             <button className="button primary" disabled={busy} type="submit">Save subscription</button></div>
+        </form>
+      </section></div>}
+      {alertEditing && <div className="modal-backdrop" role="presentation"><section className="modal-panel platform-modal"
+        role="dialog" aria-modal="true" aria-labelledby="alert-plan-title">
+        <div className="eyebrow">SEPARATE SMART ALERTS SUBSCRIPTION</div>
+        <h2 id="alert-plan-title">{alertEditing.name} · Smart Alerts</h2>
+        {error && <div className="alert error" role="alert">{error}</div>}
+        <p className="muted">Internal pilot entitlement only. This never charges the customer, and never modifies their translation subscription.</p>
+        <form className="form" onSubmit={e=>void saveAlertPlan(e)}>
+          <label>Alert plan code<input required pattern="ALERTS_[A-Z0-9_-]{2,20}" value={alertCode}
+            onChange={e=>setAlertCode(e.target.value.toUpperCase())}/></label>
+          <div className="platform-label">Subscription status</div>
+          <div className="language-chips">{(["TRIAL","ACTIVE","PAST_DUE","CANCELED"] as const).map(status =>
+            <button type="button" key={status} aria-pressed={status===alertStatus}
+              className={"chip "+(status===alertStatus?"selected":"")}
+              onClick={()=>setAlertStatus(status)}>{status.replace("_"," ")}</button>)}</div>
+          <div className="platform-label">Separate billing interval</div>
+          <div className="language-chips">{(["MONTHLY","YEARLY"] as const).map(value =>
+            <button type="button" key={value} aria-pressed={alertInterval===value}
+              className={"chip "+(alertInterval===value?"selected":"")}
+              onClick={()=>setAlertInterval(value)}>{value.toLowerCase()}</button>)}</div>
+          <label>Monitored group limit<input type="number" min={1} max={500} value={alertGroups}
+            onChange={e=>setAlertGroups(Number(e.target.value))}/></label>
+          <label>Linked WhatsApp accounts for Alerts<input type="number" min={1} max={100} value={alertConnections}
+            onChange={e=>setAlertConnections(Number(e.target.value))}/></label>
+          <label>Saved rules limit<input type="number" min={1} max={500} value={alertRules}
+            onChange={e=>setAlertRules(Number(e.target.value))}/></label>
+          <label>Matches per month<input type="number" min={1} max={100000} value={alertMatches}
+            onChange={e=>setAlertMatches(Number(e.target.value))}/></label>
+          <div className="modal-actions">
+            <button className="button secondary" type="button" disabled={busy} onClick={()=>setAlertEditing(null)}>Cancel</button>
+            <button className="button primary" type="submit" disabled={busy}>Assign Alerts entitlement</button>
+          </div>
         </form>
       </section></div>}
       {pendingGroup && <div className="modal-backdrop" role="presentation"><section className="modal-panel"

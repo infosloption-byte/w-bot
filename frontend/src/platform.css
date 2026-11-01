@@ -51,3 +51,6 @@
 .wbot-price-row small{color:#95b2bf;font-size:11px;line-height:1.5}
 .wbot-price-row>div:last-child{text-align:right;white-space:nowrap}
 @media(max-width:650px){.wbot-plan-picker{grid-template-columns:minmax(0,1fr)}.wbot-price-row{align-items:start}}
+
+/* Separate Alert-subscription administration */
+.platform-modal .alert-actions{display:flex;flex-wrap:wrap;gap:10px}
