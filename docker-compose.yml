@@ -1,0 +1,50 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: wbot
+      MYSQL_USER: wbot
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+    volumes: [wbot_mysql:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --silent -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [private]
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: mysql://wbot:${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}@db:3306/wbot
+      WEB_GATEWAY_URL: http://web-gateway:9029
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["127.0.0.1:9028:9028"]
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+  web-gateway:
+    profiles: ["web"]
+    build: ./web-gateway
+    restart: unless-stopped
+    environment:
+      WEB_GATEWAY_TOKEN: ${WEB_GATEWAY_TOKEN:-}
+      WEB_PAIRING_PHONE_NUMBER: ${WEB_PAIRING_PHONE_NUMBER:-}
+      API_INGRESS_URL: http://api:9028/internal/web/message
+      WEB_AUTH_DIR: /data/auth
+      PORT: "9029"
+    depends_on: [api]
+    volumes: [wbot_web_auth:/data/auth]
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  private:
+
+volumes:
+  wbot_mysql:
+  wbot_web_auth:

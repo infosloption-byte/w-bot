@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum GatewayKind {
+  OFFICIAL
+  WEB
+}
+
+model Group {
+  id              String    @id @default(cuid()) @db.VarChar(191)
+  whatsappGroupId String    @unique @db.VarChar(191)
+  name            String    @db.VarChar(191)
+  enabled         Boolean   @default(true)
+  gateway         GatewayKind @default(OFFICIAL)
+  targetLanguages Json
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  messages        Message[]
+}
+
+enum MessageStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Message {
+  id                String        @id @default(cuid()) @db.VarChar(191)
+  groupId           String        @db.VarChar(191)
+  group             Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  externalMessageId String        @db.VarChar(191)
+  senderId          String        @db.VarChar(191)
+  originalText      String        @db.Text
+  sourceLanguage    String?       @db.VarChar(16)
+  outputText        String?       @db.Text
+  outboundMessageId String?       @db.VarChar(191)
+  status            MessageStatus @default(PENDING)
+  attempts          Int           @default(0)
+  nextAttemptAt     DateTime      @default(now())
+  lastError         String?       @db.VarChar(500)
+  createdAt         DateTime      @default(now())
+  processedAt       DateTime?
+
+  @@unique([groupId, externalMessageId])
+  @@index([status, nextAttemptAt])
+  @@index([groupId, createdAt])
+}
