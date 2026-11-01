@@ -23,6 +23,11 @@ test("LID maps to a phone only when group metadata verifies the sender", async (
       {id:"999999999@lid",phoneNumber:"94775555555@s.whatsapp.net"}]}));
   assert.equal(result,"+94770000000");
 });
+test("verified metadata accepts explicit numeric phoneNumber for the matching LID", async () => {
+  const result=await resolveSenderPhone(message({fromMe:false,participant:"123456789@lid"}),
+    null,async()=>({participants:[{id:"123456789@lid",phoneNumber:"94770000000"}]}));
+  assert.equal(result,"+94770000000");
+});
 test("LID-only or ambiguous metadata remains unavailable, never masquerades as a phone", async () => {
   const m=message({fromMe:false,participant:"123456789@lid"});
   assert.equal(await resolveSenderPhone(m,null),null);
