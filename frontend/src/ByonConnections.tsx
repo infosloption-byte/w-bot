@@ -33,7 +33,13 @@ const statusLabel = (status: string) => ({
   REQUIRES_REPAIR: "Needs reconnection", REVOKED: "Revoked"
 } as Record<string, string>)[status] ?? status.toLowerCase().replaceAll("_", " ");
 
-export function ByonConnections({ onManageGroups }: { onManageGroups?: () => void }) {
+export function ByonConnections({
+  onManageGroups, mode = "accounts", onNavigate
+}: {
+  onManageGroups?: () => void;
+  mode?: "accounts" | "add" | "pairing";
+  onNavigate?: (tab: "accounts" | "add" | "pairing") => void;
+}) {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -114,6 +120,7 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
       await refresh();
       switchConnection(result.connection.id);
       setShowCreate(false); setLabel(""); setConsent(false);
+      onNavigate?.("pairing");
       setNotice("Connection created. Choose how to link your WhatsApp account.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to create connection"); }
     finally { setBusy(false); }
@@ -187,8 +194,8 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
       <span aria-hidden="true">◈</span> Customer-owned numbers are currently disabled by Platform Admin.
       Existing shared W-Bot groups are unaffected.
     </div>}
-    <div className="byon-progress" aria-label="Connection setup steps">
-      {["Choose a number","Link WhatsApp","Activate a group"].map((name, index) => {
+    <div className={"byon-progress" + (mode === "pairing" ? "" : " is-hidden")} aria-label="Connection setup steps">
+      {["Choose an account","Link WhatsApp","Optional: translation setup"].map((name, index) => {
         const done = index === 0 ? Boolean(selected) : index === 1 ? connected : Boolean(activation);
         return <div className={"byon-progress-step" + (done ? " is-complete" : "")} key={name}>
           <span className="byon-progress-number">{done ? "✓" : index + 1}</span>
@@ -197,16 +204,18 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
       })}
     </div>
     <div className="byon-layout">
-      <section className="panel byon-numbers-panel" aria-label="Your WhatsApp connections">
+      <section className={"panel byon-numbers-panel" + (mode === "pairing" ? " is-hidden" : "")} aria-label="Your WhatsApp connections">
         <div className="byon-panel-heading">
-          <div><div className="eyebrow">01 / YOUR NUMBERS</div><h3>Connected accounts</h3></div>
+          <div><div className="eyebrow">01 / YOUR NUMBERS</div><h3>{mode === "add" ? "Add a WhatsApp account" : "Connected accounts"}</h3></div>
           <span className="byon-count">{activeConnectionsCount} / {maxConnections === 0 ? "Unlimited" : maxConnections}</span>
         </div>
         <p className="muted text-small">Choose an existing account or link a number you control. A dedicated WhatsApp number is recommended.</p>
         <div className="byon-number-list">
           {connections.map(c => <div key={c.id} className="byon-number-row"><button type="button"
             className={"byon-number-item" + (selected === c.id ? " is-active" : "")}
-            aria-pressed={selected === c.id} onClick={() => switchConnection(c.id)}>
+            aria-pressed={selected === c.id} onClick={() => {
+              switchConnection(c.id); onNavigate?.("pairing");
+            }}>
             <span className="byon-number-icon" aria-hidden="true">☎</span>
             <span className="byon-number-info"><strong>{c.label}</strong>
               <small>{c.kind === "PERSONAL" ? "Personal" : "WhatsApp Business App"}{c.phoneLast4 ? " · ••••" + c.phoneLast4 : ""}</small>
@@ -225,11 +234,13 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
             <p>Start by creating a connection. Your phone will authorize access in the next step.</p>
           </div>}
         </div>
-        {canCreate && <button type="button" className="button secondary byon-add-button"
-          aria-expanded={showCreate} onClick={() => setShowCreate(value => !value)}>
+        {canCreate && mode === "accounts" && <button type="button" className="button secondary byon-add-button"
+          aria-expanded={showCreate} onClick={() => {
+             if (onNavigate) onNavigate("add"); else setShowCreate(value => !value);
+           }}>
           {showCreate ? "Cancel adding number" : "+ Add WhatsApp number"}
         </button>}
-        {canCreate && (showCreate || connections.length === 0) &&
+        {canCreate && (mode === "add" || (!onNavigate && (showCreate || connections.length === 0))) &&
           <form className="byon-create-form" onSubmit={e => void create(e)}>
             <h3>New WhatsApp connection</h3>
             <div className="byon-kind-picker" aria-label="WhatsApp account type">
@@ -261,7 +272,17 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
           </form>}
       </section>
 
-      <section className="panel byon-setup-panel" aria-label="Pair WhatsApp account">
+      <section className={"panel byon-setup-panel" + (mode === "pairing" ? "" : " is-hidden")} aria-label="Pair WhatsApp account">
+        <div className="quick-setup">
+          <div><strong>Choose an account to manage</strong><small>Pair or reconnect any of your authorized WhatsApp numbers.</small></div>
+          <label className="byon-field">WhatsApp account
+            <select value={selected ?? ""} onChange={e => switchConnection(e.target.value)}>
+              <option value="" disabled>Choose an account</option>
+              {connections.filter(c => c.active).map(c =>
+                <option value={c.id} key={c.id}>{c.label} · {statusLabel(c.status)}</option>)}
+            </select>
+          </label>
+        </div>
         <div className="byon-panel-heading">
           <div><div className="eyebrow">02 / LINK A DEVICE</div><h3>Connect to WhatsApp</h3></div>
           {selected && <span className={"byon-state" + (connected ? " is-online" : "")} role="status">
@@ -334,12 +355,12 @@ export function ByonConnections({ onManageGroups }: { onManageGroups?: () => voi
           </> : <>
             <div className="byon-connected" role="status"><span aria-hidden="true">✓</span>
               <div><strong>WhatsApp is connected</strong>
-                <p>W-Bot can now translate messages in groups you explicitly activate.</p></div>
+                <p>Your account is linked. Choose Translation groups or monitored groups for Smart Alerts separately.</p></div>
             </div>
             <div className="byon-next">
               <div className="eyebrow">03 / ACTIVATE A GROUP</div>
-              <h3>Choose your translation groups</h3>
-              <p className="muted text-small">Already activated groups do not need another verification code. Manage their languages in My Groups.</p>
+              <h3>Optional: Translation group activation</h3>
+              <p className="muted text-small">Existing groups don't need a new code. To monitor groups privately, use Smart Alerts instead.</p>
               <div className={"byon-group-quota" + (groupsFull ? " is-full" : "")} role="status">
                 <span>Plan group slots</span>
                 <strong>{groupSlotsUsed} / {groupSlotsLimit}</strong>
