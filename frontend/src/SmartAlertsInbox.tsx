@@ -129,7 +129,7 @@ export function SmartAlertsInbox() {
           <div className="alert-inbox-item-meta">
             <span>{item.event.group.name}</span>
             <span>Message sender: {item.event.senderPhone ?? "Number unavailable"}</span>
-            {item.contactNumber && <span>Contact in message: {item.contactNumber}</span>
+            {item.contactNumber && <span>Contact in message: {item.contactNumber}</span>}
             {item.delivery && <span>WhatsApp: {item.delivery.status.toLowerCase()}</span>}
           </div>
         </div>
