@@ -58,6 +58,7 @@ export function PublicRecovery(props: { onReturn: () => void }) {
 }
 
 export function AccountSettings(props: {
+  section?: "profile" | "workspace" | "security";
   me: {
     user: { name: string; email: string; emailVerified?: boolean };
     workspace: { name: string; role: string };
@@ -81,29 +82,44 @@ export function AccountSettings(props: {
     } catch (e) { setError(e instanceof Error ? e.message : "Failed to save"); }
     finally { setBusy(false); }
   }
+  const section = props.section ?? "profile";
+  const canManageWorkspace = props.me.workspace.role !== "VIEWER";
   return <div className="account-grid">
     {error && <div className="alert error" role="alert">{error}</div>}
     {message && <div className="alert success" role="status">{message}</div>}
-    <section className="panel">
-      <div className="eyebrow">PERSONAL DETAILS</div>
-      <h3>Your profile</h3>
+    {section === "profile" && <section className="panel">
+      <div className="eyebrow">PERSONAL DETAILS</div><h3>Profile</h3>
+      <p className="muted text-small">Your personal information and email-verification status.</p>
       <form className="form" onSubmit={e => {
-          e.preventDefault();
-          void action("/profile", props.me.workspace.role === "VIEWER" ? { name } : { name, workspace }, "Profile updated");
-        }}>
-        <label>Display name<input value={name} minLength={2} maxLength={100} onChange={e => setName(e.target.value)} required /></label>
-        <label>Workspace name<input value={workspace} minLength={2} maxLength={191}
-          onChange={e => setWorkspace(e.target.value)} disabled={props.me.workspace.role === "VIEWER"} required /></label>
+        e.preventDefault();
+        void action("/profile", { name }, "Profile updated");
+      }}>
+        <label>Display name<input value={name} minLength={2} maxLength={100}
+          onChange={e => setName(e.target.value)} required /></label>
         <label>Email address<input readOnly value={props.me.user.email} /></label>
-        <p className="muted text-small">Email: {props.me.user.emailVerified ? "Verified" : "Not verified"}</p>
+        <div className="detail"><span>Email verification</span>
+          <strong>{props.me.user.emailVerified ? "Verified" : "Not verified"}</strong></div>
         {!props.me.user.emailVerified && <button type="button" className="button secondary" disabled={busy}
           onClick={() => void action("/auth/resend-verification", {}, "Verification email requested")}>Resend verification email</button>}
         <button className="button primary" type="submit" disabled={busy}>Save profile</button>
       </form>
-    </section>
-    <section className="panel">
-      <div className="eyebrow">LOGIN SECURITY</div>
-      <h3>Change password</h3>
+    </section>}
+    {section === "workspace" && <section className="panel">
+      <div className="eyebrow">WORKSPACE</div><h3>Workspace details</h3>
+      <p className="muted text-small">Your workspace is shared across Translation and Smart Alerts.</p>
+      <form className="form" onSubmit={e => {
+        e.preventDefault();
+        void action("/profile", { name, workspace }, "Workspace updated");
+      }}>
+        <label>Workspace name<input value={workspace} minLength={2} maxLength={191}
+          onChange={e => setWorkspace(e.target.value)} disabled={!canManageWorkspace} required /></label>
+        <div className="detail"><span>Your role</span><strong>{props.me.workspace.role}</strong></div>
+        <button className="button primary" type="submit" disabled={busy || !canManageWorkspace}>Save workspace</button>
+      </form>
+    </section>}
+    {section === "security" && <section className="panel">
+      <div className="eyebrow">LOGIN SECURITY</div><h3>Change password</h3>
+      <p className="muted text-small">Changing your password revokes every active customer session.</p>
       <form className="form" onSubmit={e => {
         e.preventDefault();
         void (async () => {
@@ -123,8 +139,7 @@ export function AccountSettings(props: {
           onChange={e => setNewPassword(e.target.value)}/></label>
         <button className="button secondary" type="submit" disabled={busy}>Change password & sign out</button>
       </form>
-      <p className="muted text-small">Changing your password revokes all active sessions.</p>
-    </section>
+    </section>}
   </div>;
 }
 

@@ -6,6 +6,8 @@ import "./responsive.css";
 import { useSidebar } from "./useSidebar.js";
 import { ByonAdmin } from "./ByonAdmin.js";
 import "./connections.css";
+import "./theme-refresh.css";
+import "./workspace-pages.css";
 
 type Admin = { id: string; name: string; email: string; role: "SUPER_ADMIN" | "VIEWER"; lastLoginAt: string | null };
 type Overview = { tenants: number; users: number; groups: number; enabledGroups: number;
@@ -276,7 +278,7 @@ function Console() {
       <div className="brand"><span className="brand-mark">W</span><span>W-Bot<small>PLATFORM OPERATIONS</small></span></div>
       <div className="eyebrow">RESTRICTED ADMINISTRATIVE ACCESS</div>
       <h1>Monitor your platform.<br/><em>Protect every workspace.</em></h1>
-      <p>Centralized monitoring of customers, WhatsApp groups, subscriptions, usage and delivery incidents. Separate from customer accounts.</p>
+      <p>Manage customer workspaces, both independently licensed services, WhatsApp connections, usage and delivery incidents.</p>
       <div className="platform-login-note">Platform accounts are provisioned privately by an operator. Customer registration never grants platform access.</div>
     </div>
     <section className="platform-login-form">
@@ -360,7 +362,7 @@ function Console() {
         <div className="page-heading"><div>
           <div className="eyebrow">W-BOT PLATFORM</div>
           <h1>{nav.find(n => n.key === view)?.label}</h1>
-          <p className="muted">Monitor and manage your multi-customer WhatsApp translation service.</p>
+          <p className="muted">Monitor Translation and Smart Alerts subscriptions, WhatsApp connections and customer operations.</p>
         </div>
           <button className="button secondary" disabled={busy} onClick={() => void refresh().catch(e => setError(String(e)))}>↻ Refresh</button>
         </div>
@@ -370,6 +372,8 @@ function Console() {
             ["Registered users", overview?.users ?? "—", "Customer users"],
             ["Active groups", overview?.enabledGroups ?? "—", (overview?.groups ?? 0) + " total groups"],
             ["Translations this month", overview?.messagesThisMonth ?? "—", "UTC monthly usage"],
+            ["Active Smart Alerts tenants", tenants.filter(t => t.alertSubscription &&
+              ["ACTIVE", "TRIAL"].includes(t.alertSubscription.status)).length, "Separate Alerts entitlements"],
             ["Queued jobs", overview?.queued ?? "—", "Awaiting / processing"],
             ["Delivery failures", (overview?.failures ?? 0) + (overview?.uncertain ?? 0), "Failed + uncertain"]
           ].map(([label,number,note]) => <div className="metric" key={String(label)}>
