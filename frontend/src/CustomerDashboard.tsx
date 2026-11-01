@@ -134,7 +134,12 @@ export function CustomerDashboard(props: {
           <button type="button" className="button primary" onClick={() => {
             const chosenReady = setupChoice === "translation" ? readyTranslation :
               setupChoice === "alerts" ? readyAlerts : readyTranslation && readyAlerts;
-            if (!chosenReady) { props.onNavigate("plans", setupChoice === "alerts" ? "alerts" : "translation"); return; }
+            if (!chosenReady) {
+              const missing = setupChoice === "alerts" || (setupChoice === "both" && readyTranslation)
+                ? "alerts" : "translation";
+              props.onNavigate("plans", missing);
+              return;
+            }
             if (!activeConnections) { props.onNavigate("connections", "accounts"); return; }
             props.onNavigate(setupChoice === "translation" ? "translation" : "alerts", "groups");
           }}>Continue setup <span aria-hidden="true">→</span></button>
