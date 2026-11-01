@@ -7,6 +7,7 @@ import { useSidebar } from "./useSidebar.js";
 import { ByonAdmin } from "./ByonAdmin.js";
 import "./connections.css";
 import "./theme-refresh.css";
+import "./workspace-pages.css";
 
 type Admin = { id: string; name: string; email: string; role: "SUPER_ADMIN" | "VIEWER"; lastLoginAt: string | null };
 type Overview = { tenants: number; users: number; groups: number; enabledGroups: number;
