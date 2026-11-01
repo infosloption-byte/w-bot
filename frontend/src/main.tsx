@@ -97,7 +97,7 @@ function App() {
     setGroups(managed.groups);
   }, []);
   useEffect(() => {
-    if (!me || (view !== "translation" || (translationTab !== "groups" && translationTab !== "overview"))) return;
+    if (!me || (view !== "dashboard" && (view !== "translation" || (translationTab !== "groups" && translationTab !== "overview")))) return;
     void refreshGroups().catch(() => { /* initial dashboard can still render */ });
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") {
