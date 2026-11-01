@@ -387,7 +387,7 @@ function App() {
               <div className="metric"><div className="metric-label">AVAILABLE LANGUAGES <span>文</span></div><div className="metric-value">{languages.length.toString().padStart(2, "0")}</div><div className="metric-foot">Enabled globally by Platform Admin</div></div>
             </div>
             <div className="two-column">
-              <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => setView("groups")}>Manage all →</button></div>
+              <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
                   <div className="group-line" key={group.id}><div className="group-icon">♧</div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
                 ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp Connections</button> to begin.</div>}
@@ -442,7 +442,7 @@ function App() {
            {view === "alerts" && <>
              <div className="page-heading"><div><div className="eyebrow">PRIVATE GROUP MONITORING</div><h1>Smart Alerts</h1>
                <p className="muted">Manage monitoring, AI-powered searches and your private matches inbox.</p></div></div>
-             <SmartAlerts section={alertTab}/>
+             <SmartAlerts section={alertTab} onNavigate={tab => chooseSubtab("alerts",tab)}/>
            </>}
            {view === "settings" && <>
             <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Account settings</h1><p className="muted">Manage profile, workspace and security settings.</p></div></div>
@@ -470,7 +470,7 @@ function App() {
               <h1>Plans & Usage</h1><p className="muted">Manage independent feature access and subscription limits.</p></div></div>
             <FeatureHub onOpenAlerts={() => chooseSubtab("alerts","overview")}/>
             {(planTab === "translation" || planTab === "limits") && <WorkspaceActivity/>}
-            {(planTab === "alerts" || planTab === "limits") && <SmartAlerts section="overview"/>}
+            {(planTab === "alerts" || planTab === "limits") && <SmartAlerts section="overview" onNavigate={tab => chooseSubtab("alerts",tab)}/>}
           </>}
        </main>
         {pendingHistoryDelete && <div className="modal-backdrop" role="presentation">
