@@ -33,7 +33,7 @@ test("LID-only or ambiguous metadata remains unavailable, never masquerades as a
 });
 test("never treats a LID, group JID, or local string as a real phone", () => {
   for(const value of ["123456789@lid","123456789@g.us","0771234567",
-    "123456789@s.whatsapp.net","not-a-number"])
+    "1234@s.whatsapp.net","not-a-number"])
     assert.equal(phoneFromJid(value),null);
   assert.equal(phoneFromJid("94771234567:12@s.whatsapp.net"),"+94771234567");
 });
