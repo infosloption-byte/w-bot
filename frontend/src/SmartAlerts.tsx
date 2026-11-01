@@ -241,37 +241,44 @@ export function SmartAlerts() {
       </section>
       <section className="panel">
         <div className="panel-heading"><h3>Matching rules</h3><span className="muted text-small">Private searches</span></div>
-        <form className="alert-form" onSubmit={e=>void createRule(e)}>
-          <label className="alert-field">Rule name<input required minLength={2} maxLength={100} value={form.name}
-            placeholder="Tours from Kandy" onChange={e=>setForm({...form,name:e.target.value})}/></label>
-          <label className="alert-field">Category<select value={form.category}
-            onChange={e=>setForm({...form,category:e.target.value})}>
-            <option value="GENERIC">Generic opportunities</option>
-            <option value="TOUR">Vehicle / tour booking</option>
-          </select></label>
-          <label className="alert-field">Keywords (comma-separated alternatives)
-            <input required maxLength={500} value={form.keywords} placeholder="van,vehicle,booking"
-              onChange={e=>setForm({...form,keywords:e.target.value})}/>
+        <p className="muted text-small">Create a search with your own labels and values. AI interprets formatted or natural-language messages and checks every requirement.</p>
+        <form className="alert-form" onSubmit={e => void createRule(e)}>
+          <label className="alert-field">Search name
+            <input required minLength={2} maxLength={100} value={ruleName}
+              placeholder="My opportunities" onChange={e => setRuleName(e.target.value)}/>
           </label>
-          <div className="alert-form-split">
-            <label className="alert-field">Origin (optional)<input value={form.origin} maxLength={100}
-              onChange={e=>setForm({...form,origin:e.target.value})}/></label>
-            <label className="alert-field">Destination (optional)<input value={form.destination} maxLength={100}
-              onChange={e=>setForm({...form,destination:e.target.value})}/></label>
-            <label className="alert-field">Minimum price<input type="number" min={0} value={form.minPrice}
-              onChange={e=>setForm({...form,minPrice:e.target.value})}/></label>
-            <label className="alert-field">Maximum price<input type="number" min={0} value={form.maxPrice}
-              onChange={e=>setForm({...form,maxPrice:e.target.value})}/></label>
+          <div className="alert-parameters">
+            {parameters.map((row,i) => <div className="alert-parameter-row" key={i}>
+              <label className="alert-field">Label
+                <input required minLength={2} maxLength={60} value={row.label}
+                  placeholder="Service" onChange={e => updateParameter(i,"label",e.target.value)}/>
+              </label>
+              <label className="alert-field">Value or condition
+                <input required maxLength={250} value={row.value}
+                  placeholder="Web design or website development"
+                  onChange={e => updateParameter(i,"value",e.target.value)}/>
+              </label>
+              <button type="button" className="text-button danger-action" disabled={parameters.length === 1}
+                onClick={() => setParameters(old => old.filter((_,j) => j !== i))}>Remove</button>
+            </div>)}
           </div>
-          <label className="consent-row"><input type="checkbox" checked={form.requireContact}
-            onChange={e=>setForm({...form,requireContact:e.target.checked})}/>
-            <span>Only alert if a contact number appears in the message</span>
-          </label>
-          <button className="button primary" type="submit" disabled={!licensed||busy}>Save matching rule</button>
+          <button type="button" className="text-button" disabled={parameters.length >= 12}
+            onClick={() => setParameters(old => [...old,blankParameter()])}>+ Add parameter</button>
+          <p className="muted text-small">Example: Service → Graphic design, Location → Colombo or Galle, Budget → At least 20,000 LKR. Use any labels relevant to your business.</p>
+          <div className="feature-actions">
+            <button className="button primary" type="submit" disabled={!licensed || busy}>
+              {editingRule ? "Update search" : "Create intelligent search"}
+            </button>
+            {editingRule && <button type="button" className="button secondary"
+              onClick={resetSearch}>Cancel edit</button>}
+          </div>
         </form>
         <div className="alert-items">{rules.map(rule=><div className="alert-item" key={rule.id}>
-          <div><strong>{rule.name}</strong><small>{rule.keywords} · {rule.enabled?"Active":"Paused"}</small></div>
+          <div><strong>{rule.name}</strong><small>{Array.isArray(rule.parameters)
+            ? rule.parameters.map(p => p.label + ": " + p.value).join(" · ")
+            : "Legacy terms: " + rule.keywords} · {rule.enabled ? "Active" : "Paused"}</small></div>
           <div className="alert-actions">
+            <button className="text-button" disabled={busy} onClick={() => editSearch(rule)}>Edit</button>
             <button className="text-button" disabled={busy} onClick={()=>void action(
               ()=>portalRequest("/alerts/rules/"+encodeURIComponent(rule.id),{enabled:!rule.enabled},"PATCH"),
               "Rule updated.")}>{rule.enabled?"Pause":"Resume"}</button>
@@ -292,7 +299,7 @@ export function SmartAlerts() {
         <p>{item.summary}</p>
         <div className="alert-match-meta">
           <span>Group: {item.event.group.name}</span>
-          {item.quotedPrice!=null && <span>Quoted fare: {item.quotedPrice.toLocaleString()}</span>}
+          {item.quotedPrice!=null && <span>Amount: {item.quotedPrice.toLocaleString()}</span>}
           {item.contactNumber && <span>Contact: {item.contactNumber}</span>}
         </div>
         {!item.isRead && <button className="text-button" disabled={busy} onClick={()=>void action(
@@ -300,6 +307,6 @@ export function SmartAlerts() {
           "Alert marked as read.")}>Mark read</button>}
       </article>)}</div> : <p className="muted">No matching messages yet. Add a monitored group and rule to begin.</p>}
     </section>
-    <p className="muted text-small">Pilot matcher uses explicit keywords, locations and prices; AI semantic extraction and external notification delivery are planned later. WhatsApp linked-device monitoring is unofficial and may be restricted.</p>
+    <p className="muted text-small">The Gemini-based semantic matcher is independently enabled by the administrator; AI results should always be checked against the original group message. External notification delivery is not yet available. WhatsApp linked-device monitoring is unofficial and may be restricted.</p>
   </div>;
 }
