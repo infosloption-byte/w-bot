@@ -21,5 +21,13 @@ export async function runRetention(prisma: PrismaClient, cfg: Config) {
   await prisma.tenantAudit.deleteMany({
     where: { createdAt: { lt: new Date(now.getTime() - 90 * 86_400_000) } }
   });
+  // Smart Alerts content and extracted contact details have a shorter TTL.
+  const watchCutoff = new Date(now.getTime() - 14 * 86_400_000);
+  const oldAlerts = await prisma.watchEvent.findMany({
+    where: { createdAt: { lt: watchCutoff } }, take: 250, select: { id: true }
+  });
+  if (oldAlerts.length) {
+    await prisma.watchEvent.deleteMany({ where: { id: { in: oldAlerts.map(x => x.id) } } });
+  }
   return old.length;
 }

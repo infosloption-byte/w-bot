@@ -40,6 +40,12 @@ model Tenant {
   activations GroupActivation[]
   usageBuckets TenantUsage[]
   subscription TenantSubscription?
+  alertSubscription AlertSubscription?
+  watchGroups WatchGroup[]
+  watchRules WatchRule[]
+  watchEvents WatchEvent[]
+  alertMatches AlertMatch[]
+  alertUsage AlertUsage[]
   auditEvents TenantAudit[]
   whatsappConnections CustomerWhatsAppConnection[]
 }
@@ -177,6 +183,7 @@ model TenantSubscription {
   tenant         Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   planCode       String  @default("PILOT") @db.VarChar(30)
   billingInterval BillingInterval @default(MONTHLY)
+  translationEnabled Boolean @default(true)
   status         SubscriptionStatus @default(TRIAL)
   groupLimit     Int     @default(3)
   monthlyMessages Int   @default(1000)
@@ -281,6 +288,7 @@ model CustomerWhatsAppConnection {
   updatedAt    DateTime                  @updatedAt
   lastSeenAt   DateTime?
   groups       Group[]
+  watchedGroups WatchGroup[]
 
   @@index([tenantId, active])
 }
@@ -292,4 +300,114 @@ model WhatsAppConnectionPolicy {
   customerNumbersEnabled Boolean  @default(false)
   maxConnectionsPerTenant Int     @default(0) // 0 = unlimited global pilot policy
   updatedAt              DateTime @updatedAt
+}
+
+/**
+ * Independent Smart Alerts entitlement. Absence of a record means the feature
+ * is locked. No AlertSubscription is automatically created for translators.
+ * Billing checkout is not implemented; only Platform Admin can assign a pilot.
+ */
+model AlertSubscription {
+  tenantId          String   @id @db.VarChar(191)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planCode          String   @default("ALERTS_PILOT") @db.VarChar(30)
+  status            SubscriptionStatus @default(TRIAL)
+  billingInterval   BillingInterval @default(MONTHLY)
+  enabled           Boolean  @default(false)
+  maxGroups         Int      @default(3)
+  maxConnections    Int      @default(1)
+  maxRules          Int      @default(5)
+  maxMatchesPerMonth Int     @default(100)
+  periodEnd         DateTime?
+  updatedAt         DateTime @updatedAt
+}
+
+model WatchGroup {
+  id                String   @id @default(cuid()) @db.VarChar(191)
+  tenantId          String   @db.VarChar(191)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectionId      String   @db.VarChar(191)
+  connection        CustomerWhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  whatsappGroupId   String   @db.VarChar(191)
+  name              String   @db.VarChar(191)
+  enabled           Boolean  @default(true)
+  consentAt         DateTime
+  createdAt         DateTime @default(now())
+  events            WatchEvent[]
+
+  @@unique([connectionId, whatsappGroupId])
+  @@index([tenantId, enabled])
+}
+
+enum WatchEventStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model WatchRule {
+  id              String   @id @default(cuid()) @db.VarChar(191)
+  tenantId        String   @db.VarChar(191)
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String   @db.VarChar(100)
+  category        String   @default("GENERIC") @db.VarChar(20)
+  keywords        String   @db.VarChar(500)
+  origin          String?  @db.VarChar(100)
+  destination     String?  @db.VarChar(100)
+  minPrice        Int?
+  maxPrice        Int?
+  requireContact  Boolean @default(false)
+  enabled         Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  matches         AlertMatch[]
+
+  @@index([tenantId, enabled])
+}
+
+model WatchEvent {
+  id                String @id @default(cuid()) @db.VarChar(191)
+  tenantId          String @db.VarChar(191)
+  tenant            Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  watchGroupId      String @db.VarChar(191)
+  group             WatchGroup @relation(fields: [watchGroupId], references: [id], onDelete: Cascade)
+  externalMessageId String @db.VarChar(191)
+  content           String? @db.Text
+  status            WatchEventStatus @default(PENDING)
+  attempts          Int @default(0)
+  nextAttemptAt     DateTime @default(now())
+  createdAt         DateTime @default(now())
+  processedAt       DateTime?
+  matches           AlertMatch[]
+
+  @@unique([watchGroupId, externalMessageId])
+  @@index([status, nextAttemptAt])
+  @@index([tenantId, createdAt])
+}
+
+model AlertMatch {
+  id                String @id @default(cuid()) @db.VarChar(191)
+  tenantId          String @db.VarChar(191)
+  tenant            Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  watchEventId      String @db.VarChar(191)
+  event             WatchEvent @relation(fields: [watchEventId], references: [id], onDelete: Cascade)
+  watchRuleId       String @db.VarChar(191)
+  rule              WatchRule @relation(fields: [watchRuleId], references: [id], onDelete: Cascade)
+  summary           String @db.VarChar(500)
+  contactNumber     String? @db.VarChar(32)
+  quotedPrice       Int?
+  isRead            Boolean @default(false)
+  createdAt         DateTime @default(now())
+
+  @@unique([watchEventId, watchRuleId])
+  @@index([tenantId, createdAt])
+}
+
+model AlertUsage {
+  tenantId String @db.VarChar(191)
+  month    String @db.VarChar(7)
+  matches  Int @default(0)
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@id([tenantId, month])
 }

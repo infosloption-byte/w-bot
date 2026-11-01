@@ -5,9 +5,10 @@ import "./responsive.css";
 import { useSidebar } from "./useSidebar.js";
 import { PublicRecovery, AccountSettings, WorkspaceActivity, portalRequest } from "./PortalAccount.js";
 import { ByonConnections } from "./ByonConnections.js";
+import { FeatureHub, SmartAlerts } from "./SmartAlerts.js";
 import "./connections.css";
 
-type View = "overview" | "groups" | "activate" | "connections" | "settings" | "activity";
+type View = "overview" | "groups" | "activate" | "connections" | "features" | "alerts" | "settings" | "activity";
 type Group = {
   id: string; name: string; whatsappGroupId: string;
   enabled: boolean; gateway: "WEB" | "OFFICIAL";
@@ -210,8 +211,8 @@ function App() {
         <div className="brand"><span className="brand-mark">W</span><span>W-Bot <small>by SL Options</small></span></div>
         <div className="auth-hero-body">
           <div className="eyebrow"><span className="live-dot" /> PRIVATE TECHNICAL PILOT</div>
-          <h1>One bot.<br/><em>Every language.</em><br/>Your groups.</h1>
-          <p>Bring multilingual WhatsApp group conversations together with intelligent translation. One shared W-Bot number. Your own private workspace.</p>
+          <h1>One workspace.<br/><em>Two smart services.</em><br/>Your groups.</h1>
+          <p>Translate group conversations or monitor selected groups for relevant opportunities. Use the services you subscribe to with a shared account and WhatsApp connection.</p>
           <div className="hero-features"><span>◉ Languages managed by platform</span><span>◉ Replies in context</span><span>◉ Group controls</span></div>
         </div>
         <div className="auth-disclaimer">Invitation-only pilot · Unofficial WhatsApp Web connector · Group administrator consent required</div>
@@ -220,7 +221,7 @@ function App() {
         <div className="auth-box">
           <div className="eyebrow">CUSTOMER PORTAL</div>
           <h2>{loginMode === "login" ? "Welcome back" : loginMode === "forgot" ? "Reset your password" : "Create your workspace"}</h2>
-          <p className="muted">{loginMode === "login" ? "Sign in to manage your WhatsApp translation groups." : loginMode === "forgot" ? "Enter your email to request a secure reset link." : "Start your invite-only W-Bot pilot."}</p>
+          <p className="muted">{loginMode === "login" ? "Sign in to manage translations and private group alerts." : loginMode === "forgot" ? "Enter your email to request a secure reset link." : "Start your invite-only W-Bot pilot."}</p>
           {error && <div className="alert error" role="alert">{error}</div>}
           <form onSubmit={e => void submitAuth(e)} className="form">
             {loginMode === "signup" && <>
@@ -248,6 +249,8 @@ function App() {
     { id: "groups", label: "My Groups", icon: "☰" },
     { id: "activate", label: "Add Group", icon: "+" },
     { id: "connections", label: "WhatsApp Numbers", icon: "♧" },
+    { id: "features", label: "My Features", icon: "⊞" },
+    { id: "alerts", label: "Smart Alerts", icon: "✧" },
     { id: "settings", label: "Workspace", icon: "⚙" },
     { id: "activity", label: "Activity & Plan", icon: "◷" }
   ];
@@ -304,7 +307,7 @@ function App() {
           {error && <div className="alert error" role="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss">×</button></div>}
 
           {view === "overview" && <>
-            <div className="page-heading"><div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>Good to see you, {me.user.name.split(" ")[0]}.</h1><p className="muted">Your multilingual WhatsApp translation service at a glance.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add WhatsApp group</button></div>
+            <div className="page-heading"><div><div className="eyebrow">WORKSPACE OVERVIEW</div><h1>Good to see you, {me.user.name.split(" ")[0]}.</h1><p className="muted">Your enabled WhatsApp services at a glance.</p></div><button className="button primary" onClick={() => setView("activate")}>+ Add WhatsApp group</button></div>
             <div className="metrics">
               <div className="metric"><div className="metric-label">REGISTERED GROUPS <span>▦</span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
               <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span>◉</span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
@@ -386,7 +389,17 @@ function App() {
             </div>
           </>}
 
-          {view === "settings" && <>
+          {view === "features" && <>
+             <div className="page-heading"><div><div className="eyebrow">INDEPENDENT FEATURE SUBSCRIPTIONS</div><h1>My features</h1>
+               <p className="muted">Translate and Smart Alerts have separate activation and paid entitlements, with one workspace login.</p></div></div>
+             <FeatureHub onOpenAlerts={() => setView("alerts")}/>
+           </>}
+           {view === "alerts" && <>
+             <div className="page-heading"><div><div className="eyebrow">PRIVATE GROUP MONITORING</div><h1>Smart Alerts</h1>
+               <p className="muted">Find matching new messages in selected groups. The translation pipeline is unaffected.</p></div></div>
+             <SmartAlerts/>
+           </>}
+           {view === "settings" && <>
             <div className="page-heading"><div><div className="eyebrow">MY ACCOUNT</div><h1>Workspace settings</h1><p className="muted">Your account and shared bot configuration.</p></div></div>
             <AccountSettings me={me} onRefresh={refresh} onLogout={logout}/>
           </>}
