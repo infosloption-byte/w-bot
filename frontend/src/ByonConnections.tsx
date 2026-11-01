@@ -279,13 +279,17 @@ export function ByonConnections({
       <section className={"panel byon-setup-panel" + (mode === "pairing" ? "" : " is-hidden")} aria-label="Pair WhatsApp account">
         <div className="quick-setup">
           <div><strong>Choose an account to manage</strong><small>Pair or reconnect any of your authorized WhatsApp numbers.</small></div>
-          <label className="byon-field">WhatsApp account
-            <select value={selected ?? ""} onChange={e => switchConnection(e.target.value)}>
-              <option value="" disabled>Choose an account</option>
-              {connections.filter(c => c.active).map(c =>
-                <option value={c.id} key={c.id}>{c.label} · {statusLabel(c.status)}</option>)}
-            </select>
-          </label>
+          <div className="pair-account-list" role="group" aria-label="Select WhatsApp account">
+            {connections.filter(c => c.active).map(c =>
+              <button type="button" key={c.id} aria-pressed={selected === c.id}
+                className={"pair-account-option" + (selected === c.id ? " is-selected" : "")}
+                onClick={() => switchConnection(c.id)}>
+                <strong>{c.label}</strong><small>{statusLabel(c.status)}</small>
+              </button>)}
+            {!connections.some(c => c.active) && <p className="muted">
+              No linked accounts available. Add one under Connected Accounts.
+            </p>}
+          </div>
         </div>
         <div className="byon-panel-heading">
           <div><div className="eyebrow">02 / LINK A DEVICE</div><h3>Connect to WhatsApp</h3></div>
