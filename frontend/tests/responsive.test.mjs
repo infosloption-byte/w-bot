@@ -127,3 +127,18 @@ test("Model C displays unlimited multi-number allowance, group quota and accessi
   }
   assert.ok(platform.includes("whatsappConnectionLimit"));
 });
+
+test("customer and admin surfaces show catalog prices and unlimited text without message quota bars", () => {
+  const account = fromRoot("src/PortalAccount.tsx");
+  for (const term of ["wbot-plan-picker","billingInterval","pricingPlans","Yearly · save 2 months"]) {
+    assert.ok(platform.includes(term),term);
+  }
+  for (const term of ["wbot-price-catalog","Unlimited","whatsappConnections","yearlyCents"]) {
+    assert.ok(account.includes(term),term);
+  }
+  assert.ok(customer.includes("Unlimited text translations · usage monitored"));
+  assert.ok(!customer.includes("me.limits.messagesPerMonth"));
+  const theme=fromRoot("src/platform.css");
+  assert.ok(theme.includes("max-width:650px"));
+  assert.ok(theme.includes(".wbot-plan-choice.is-selected"));
+});

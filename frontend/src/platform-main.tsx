@@ -12,11 +12,13 @@ type Overview = { tenants: number; users: number; groups: number; enabledGroups:
   messagesThisMonth: number; queued: number; failures: number; uncertain: number;
   gateway: { status: string; checkedAt: string | null; changedAt: string | null } };
 type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
-  groupLimit: number; monthlyMessages: number; whatsappConnectionLimit: number; periodEnd: string | null };
-type PlanOffer = { code: string; name: string; monthlyUsd: number; yearlyUsd: number;
-  groupLimit: number; whatsappConnectionLimit: number; monthlyMessages: number };
+  groupLimit: number; whatsappConnectionLimit: number; billingInterval: "MONTHLY" | "YEARLY"; periodEnd: string | null };
+type AlertPlan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
+  billingInterval: "MONTHLY" | "YEARLY"; enabled: boolean;
+  maxGroups: number; maxConnections: number; maxRules: number; maxMatchesPerMonth: number; periodEnd: string | null };
+type CatalogPlan = { code: string; name: string; monthlyCents: number; yearlyCents: number; whatsappConnections: number; groups: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
-  memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null };
+  memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null; alertSubscription: AlertPlan | null };
 type Group = { id: string; name: string; enabled: boolean; gateway: string;
   updatedAt: string; claimedAt: string | null; tenant: { id: string; name: string } | null;
   targetLanguages: unknown; _count: { messages: number } };
@@ -68,7 +70,6 @@ function Console() {
   const [users, setUsers] = useState<CustomerUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [catalog, setCatalog] = useState<CatalogLanguage[]>([]);
-  const [planOffers, setPlanOffers] = useState<PlanOffer[]>([]);
   const [newLanguageCode, setNewLanguageCode] = useState("");
   const [newLanguageName, setNewLanguageName] = useState("");
   const [newLanguageEnabled, setNewLanguageEnabled] = useState(true);
@@ -78,17 +79,26 @@ function Console() {
   const [platformActivity, setPlatformActivity] = useState<Audit[]>([]);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Tenant | null>(null);
+  const [alertEditing, setAlertEditing] = useState<Tenant | null>(null);
+  const [alertCode, setAlertCode] = useState("ALERTS_PILOT");
+  const [alertStatus, setAlertStatus] = useState<AlertPlan["status"]>("TRIAL");
+  const [alertInterval, setAlertInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [alertGroups, setAlertGroups] = useState(3);
+  const [alertConnections, setAlertConnections] = useState(1);
+  const [alertRules, setAlertRules] = useState(5);
+  const [alertMatches, setAlertMatches] = useState(100);
   const [planCode, setPlanCode] = useState("PILOT");
   const [planStatus, setPlanStatus] = useState<Plan["status"]>("TRIAL");
   const [groupLimit, setGroupLimit] = useState(3);
-  const [monthlyMessages, setMonthlyMessages] = useState(1000);
+  const [billingInterval, setBillingInterval] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [pricingPlans, setPricingPlans] = useState<CatalogPlan[]>([]);
   const [whatsappConnectionLimit, setWhatsappConnectionLimit] = useState(0);
   const [pendingGroup, setPendingGroup] = useState<Group | null>(null);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
 
   const refresh = useCallback(async () => {
-    const [summary, tenantData, userData, groupData, languageData, failures, actions, plansData] = await Promise.all([
+    const [summary, tenantData, userData, groupData, languageData, failures, actions, pricing] = await Promise.all([
       platformApi<Overview>("/overview"),
       platformApi<{ tenants: Tenant[] }>("/tenants"),
       platformApi<{ users: CustomerUser[] }>("/users"),
@@ -96,11 +106,15 @@ function Console() {
       platformApi<{ languages: CatalogLanguage[] }>("/languages"),
       platformApi<{ messages: Delivery[] }>("/deliveries"),
       platformApi<{ events: Audit[]; platformEvents: Audit[] }>("/activity"),
-      platformApi<{ plans: PlanOffer[] }>("/plans")
+      fetch("/portal/api/plans", { credentials: "same-origin", cache: "no-store" })
+        .then(async res => {
+          if (!res.ok) throw Error("Pricing catalog unavailable");
+          return await res.json() as { plans: CatalogPlan[] };
+        })
     ]);
     setOverview(summary); setTenants(tenantData.tenants); setUsers(userData.users); setGroups(groupData.groups);
     setCatalog(languageData.languages);
-    setPlanOffers(plansData.plans);
+    setPricingPlans(pricing.plans);
     setDeliveries(failures.messages);
     setActivity(actions.events); setPlatformActivity(actions.platformEvents);
   }, []);
@@ -132,7 +146,7 @@ function Console() {
     try { await platformApi("/auth/logout", { method: "POST", body: "{}" }); }
     catch { /* Clear local state regardless of a network error. */ }
     setAdmin(null); setOverview(null); setTenants([]);
-    setGroups([]); setCatalog([]); setPlanOffers([]); setDeliveries([]); setActivity([]);
+    setGroups([]); setCatalog([]); setDeliveries([]); setActivity([]);
   }
 
   function editPlan(t: Tenant) {
@@ -140,19 +154,9 @@ function Console() {
     setPlanCode(t.subscription?.planCode ?? "PILOT");
     setPlanStatus(t.subscription?.status ?? "TRIAL");
     setGroupLimit(t.subscription?.groupLimit ?? 3);
-    setMonthlyMessages(t.subscription?.monthlyMessages ?? 1000);
+    setBillingInterval(t.subscription?.billingInterval ?? "MONTHLY");
     setWhatsappConnectionLimit(t.subscription?.whatsappConnectionLimit ?? 0);
     setNotice(""); setError("");
-  }
-
-  function choosePlan(code: string) {
-    setPlanCode(code);
-    const tier = planOffers.find(item => item.code === code);
-    if (tier) {
-      setGroupLimit(tier.groupLimit);
-      setMonthlyMessages(tier.monthlyMessages);
-      setWhatsappConnectionLimit(tier.whatsappConnectionLimit);
-    }
   }
 
   async function savePlan(event: React.FormEvent) {
@@ -163,13 +167,44 @@ function Console() {
       await platformApi("/tenants/" + encodeURIComponent(editing.id) + "/subscription", {
         method: "PATCH",
         body: JSON.stringify({
-          planCode, status: planStatus, groupLimit, monthlyMessages, whatsappConnectionLimit,
+          planCode, billingInterval, status: planStatus,
+          ...(planCode === "PILOT" ? { groupLimit, whatsappConnectionLimit } : {}),
           periodEnd: editing.subscription?.periodEnd ?? null
         })
       });
       setEditing(null); await refresh();
-      setNotice("Workspace subscription updated. Change recorded in platform audit.");
+      setNotice("Workspace plan and billing interval saved. This is an administrative assignment, not a Paddle charge.");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to save plan"); }
+    finally { setBusy(false); }
+  }
+
+  function editAlertPlan(t: Tenant) {
+    setAlertEditing(t);
+    setAlertCode(t.alertSubscription?.planCode ?? "ALERTS_PILOT");
+    setAlertStatus(t.alertSubscription?.status ?? "TRIAL");
+    setAlertInterval(t.alertSubscription?.billingInterval ?? "MONTHLY");
+    setAlertGroups(t.alertSubscription?.maxGroups ?? 3);
+    setAlertConnections(t.alertSubscription?.maxConnections ?? 1);
+    setAlertRules(t.alertSubscription?.maxRules ?? 5);
+    setAlertMatches(t.alertSubscription?.maxMatchesPerMonth ?? 100);
+    setError(""); setNotice("");
+  }
+  async function saveAlertPlan(event: React.FormEvent) {
+    event.preventDefault();
+    if (!alertEditing) return;
+    setBusy(true); setError("");
+    try {
+      await platformApi("/tenants/" + encodeURIComponent(alertEditing.id) + "/alerts/subscription", {
+        method: "PATCH",
+        body: JSON.stringify({
+          planCode: alertCode, status: alertStatus, billingInterval: alertInterval,
+          maxGroups: alertGroups, maxConnections: alertConnections, maxRules: alertRules, maxMatchesPerMonth: alertMatches,
+          periodEnd: alertEditing.alertSubscription?.periodEnd ?? null
+        })
+      });
+      setAlertEditing(null); await refresh();
+      setNotice("Smart Alerts entitlement updated separately. No payment has been collected.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to update alert subscription"); }
     finally { setBusy(false); }
   }
 
@@ -352,15 +387,6 @@ function Console() {
           </section>
         </div></>}
         {view === "tenants" && <section className="panel platform-panel">
-          <div className="eyebrow">PUBLISHED SUBSCRIPTION TIERS · USD</div>
-          <div className="subscription-plan-grid platform-plan-grid">{planOffers.map(offer =>
-            <div className="subscription-tier" key={offer.code}>
-              <div className="subscription-tier-head"><strong>{offer.name}</strong></div>
-              <div className="subscription-price">${offer.monthlyUsd}<small>/month</small></div>
-              <p className="muted text-small">${offer.yearlyUsd.toLocaleString()}/year · 2 months free</p>
-              <div className="detail"><span>Numbers / groups</span><strong>{offer.whatsappConnectionLimit} / {offer.groupLimit}</strong></div>
-              <div className="detail"><span>Text translations</span><strong>Unlimited</strong></div>
-            </div>)}</div>
           <div className="platform-toolbar"><h3>Customer workspaces ({tenants.length})</h3>
             <input aria-label="Search customer workspaces" className="platform-search" placeholder="Search customers…" value={search} onChange={e => setSearch(e.target.value)}/></div>
           <div className="platform-table-scroll"><table className="platform-table"><thead><tr>
@@ -369,10 +395,15 @@ function Console() {
             <td data-label="Workspace"><strong>{t.name}</strong><small>{formatted(t.createdAt)}</small></td>
             <td data-label="Owner">{t.owner?.displayName ?? "—"}<small>{t.owner?.email ?? "—"}</small></td>
             <td data-label="Groups">{t.groupCount}</td>
-            <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span><small>{t.subscription?.planCode ?? "PILOT"}</small></td>
-            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} / {t.subscription ? (t.subscription.monthlyMessages === 0 ? "Unlimited" : t.subscription.monthlyMessages.toLocaleString()) : "—"}</td>
+            <td data-label="Subscription"><span className="status on">{t.subscription?.status ?? "TRIAL"}</span>
+              <small>Translation: {t.subscription?.planCode ?? "PILOT"}</small>
+              <small>Alerts: {t.alertSubscription?.status ?? "Not subscribed"}</small></td>
+            <td data-label="Monthly usage">{t.monthUsage.toLocaleString()} messages (unlimited)</td>
             <td data-label="Action">{admin.role === "SUPER_ADMIN" &&
-              <button className="text-button" onClick={() => editPlan(t)}>Manage plan</button>}</td>
+              <div className="alert-actions">
+                <button className="text-button" onClick={() => editPlan(t)}>Translation plan</button>
+                <button className="text-button" onClick={() => editAlertPlan(t)}>Smart Alerts plan</button>
+              </div>}</td>
           </tr>)}</tbody></table></div>
           {!filteredTenants.length && <p className="muted">No matching customers.</p>}
         </section>}
@@ -494,26 +525,77 @@ function Console() {
         role="dialog" aria-modal="true" aria-labelledby="plan-title">
         <div className="eyebrow">WORKSPACE SUBSCRIPTION</div>
         <h2 id="plan-title">Manage {editing.name}</h2>
+        {error && <div className="alert error" role="alert">{error}</div>}
         <p className="muted">This pilot does not process payments. Changes affect plan enforcement immediately.</p>
         <form className="form" onSubmit={e => void savePlan(e)}>
-          <div className="platform-label">Published tiers</div>
-          <div className="language-chips">{planOffers.map(offer =>
-            <button key={offer.code} type="button" className={"chip " + (planCode === offer.code ? "selected" : "")}
-              aria-pressed={planCode === offer.code} onClick={() => choosePlan(offer.code)}>
-              {offer.name} · ${offer.monthlyUsd}/mo
-            </button>)}</div>
-          <label>Plan code (PILOT or published tier)<input value={planCode} pattern="[A-Z0-9_-]{2,30}" onChange={e => choosePlan(e.target.value.toUpperCase())}/></label>
-          {planOffers.some(offer => offer.code === planCode) && <p className="muted text-small">Published tier limits are fixed by the server, including unlimited text translations (0 message cap). Billing is not connected.</p>}
+          <div className="platform-label">Choose subscription</div>
+          <div className="wbot-plan-picker" role="group" aria-label="Subscription plans">
+            {pricingPlans.map(plan => <button type="button" key={plan.code}
+              className={"wbot-plan-choice" + (planCode === plan.code ? " is-selected" : "")}
+              aria-pressed={planCode === plan.code} onClick={() => {
+                setPlanCode(plan.code); setGroupLimit(plan.groups);
+                setWhatsappConnectionLimit(plan.whatsappConnections);
+              }}>
+              <strong>{plan.name}</strong>
+              <span>{plan.whatsappConnections} numbers · {plan.groups} groups</span>
+              <b>${(billingInterval === "YEARLY" ? plan.yearlyCents : plan.monthlyCents) / 100}/{billingInterval === "YEARLY" ? "year" : "month"}</b>
+            </button>)}
+            <button type="button" className={"wbot-plan-choice" + (planCode === "PILOT" ? " is-selected" : "")}
+              aria-pressed={planCode === "PILOT"} onClick={() => setPlanCode("PILOT")}>
+              <strong>Pilot</strong><span>Existing internal workspace</span><b>Unbilled</b>
+            </button>
+          </div>
+          <div className="platform-label">Billing frequency</div>
+          <div className="language-chips">{(["MONTHLY","YEARLY"] as const).map(value =>
+            <button type="button" key={value} aria-pressed={billingInterval === value}
+              className={"chip " + (billingInterval === value ? "selected" : "")}
+              onClick={() => setBillingInterval(value)}>{value === "MONTHLY" ? "Monthly" : "Yearly · save 2 months"}</button>)}</div>
+          <p className="muted text-small">Unlimited text translations on every plan. Commercial limits are set by the catalog and cannot be manually overridden. This interface does not collect payment.</p>
           <div className="platform-label">Subscription status</div>
           <div className="language-chips">{(["TRIAL","ACTIVE","PAST_DUE","CANCELED"] as const).map(status =>
             <button type="button" key={status} className={"chip " + (planStatus === status ? "selected" : "")}
               aria-pressed={planStatus === status} onClick={() => setPlanStatus(status)}>{status.replace("_"," ")}</button>)}</div>
-          <label>Maximum groups<input type="number" min={0} max={1000} readOnly={planOffers.some(offer => offer.code === planCode)} value={groupLimit} onChange={e => setGroupLimit(Number(e.target.value))}/></label>
-          <label>Monthly messages (0 = unlimited text)<input type="number" min={0} max={1000000} readOnly={planOffers.some(offer => offer.code === planCode)} value={monthlyMessages} onChange={e => setMonthlyMessages(Number(e.target.value))}/></label>
-           <label>WhatsApp connections (0 = unlimited during pilot)<input type="number" min={0} max={1000}
-             readOnly={planOffers.some(offer => offer.code === planCode)} value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
+          {planCode === "PILOT" && <div className="wbot-pilot-fields">
+            <label>Pilot group slots<input type="number" min={0} max={1000} value={groupLimit}
+              onChange={e => setGroupLimit(Number(e.target.value))}/></label>
+            <label>Pilot WhatsApp connections (0 = unlimited)<input type="number" min={0} max={1000}
+              value={whatsappConnectionLimit} onChange={e => setWhatsappConnectionLimit(Number(e.target.value))}/></label>
+          </div>}
           <div className="modal-actions"><button className="button secondary" type="button" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
             <button className="button primary" disabled={busy} type="submit">Save subscription</button></div>
+        </form>
+      </section></div>}
+      {alertEditing && <div className="modal-backdrop" role="presentation"><section className="modal-panel platform-modal"
+        role="dialog" aria-modal="true" aria-labelledby="alert-plan-title">
+        <div className="eyebrow">SEPARATE SMART ALERTS SUBSCRIPTION</div>
+        <h2 id="alert-plan-title">{alertEditing.name} · Smart Alerts</h2>
+        {error && <div className="alert error" role="alert">{error}</div>}
+        <p className="muted">Internal pilot entitlement only. This never charges the customer, and never modifies their translation subscription.</p>
+        <form className="form" onSubmit={e=>void saveAlertPlan(e)}>
+          <label>Alert plan code<input required pattern="ALERTS_[A-Z0-9_-]{2,20}" value={alertCode}
+            onChange={e=>setAlertCode(e.target.value.toUpperCase())}/></label>
+          <div className="platform-label">Subscription status</div>
+          <div className="language-chips">{(["TRIAL","ACTIVE","PAST_DUE","CANCELED"] as const).map(status =>
+            <button type="button" key={status} aria-pressed={status===alertStatus}
+              className={"chip "+(status===alertStatus?"selected":"")}
+              onClick={()=>setAlertStatus(status)}>{status.replace("_"," ")}</button>)}</div>
+          <div className="platform-label">Separate billing interval</div>
+          <div className="language-chips">{(["MONTHLY","YEARLY"] as const).map(value =>
+            <button type="button" key={value} aria-pressed={alertInterval===value}
+              className={"chip "+(alertInterval===value?"selected":"")}
+              onClick={()=>setAlertInterval(value)}>{value.toLowerCase()}</button>)}</div>
+          <label>Monitored group limit<input type="number" min={1} max={500} value={alertGroups}
+            onChange={e=>setAlertGroups(Number(e.target.value))}/></label>
+          <label>Linked WhatsApp accounts for Alerts<input type="number" min={1} max={100} value={alertConnections}
+            onChange={e=>setAlertConnections(Number(e.target.value))}/></label>
+          <label>Saved rules limit<input type="number" min={1} max={500} value={alertRules}
+            onChange={e=>setAlertRules(Number(e.target.value))}/></label>
+          <label>Matches per month<input type="number" min={1} max={100000} value={alertMatches}
+            onChange={e=>setAlertMatches(Number(e.target.value))}/></label>
+          <div className="modal-actions">
+            <button className="button secondary" type="button" disabled={busy} onClick={()=>setAlertEditing(null)}>Cancel</button>
+            <button className="button primary" type="submit" disabled={busy}>Assign Alerts entitlement</button>
+          </div>
         </form>
       </section></div>}
       {pendingGroup && <div className="modal-backdrop" role="presentation"><section className="modal-panel"

@@ -16,7 +16,9 @@ jobs:
           DATABASE_URL: mysql://user:pass@localhost:3306/wbot
       - run: npm run build
       - run: npm test
-      - run: npm install --no-audit --no-fund
+      - name: Install React portal dependencies
         working-directory: frontend
-      - run: npm run build
+        run: npm install --no-audit --no-fund
+      - name: Build and type-check customer and platform portals
         working-directory: frontend
+        run: npm run build

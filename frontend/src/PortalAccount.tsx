@@ -131,15 +131,16 @@ export function AccountSettings(props: {
 type Audit = { id: string; action: string; groupId: string | null; createdAt: string };
 type Activation = { id: string; expiresAt: string; consumedAt: string | null;
   activatedGroupId: string | null; createdAt: string };
-type Plan = { plan: string; status: string; groups: number; whatsappConnections: number; messagesPerMonth: number; periodEnd: string | null };
-type PlanOffer = { code: string; name: string; monthlyUsd: number; yearlyUsd: number;
-  groupLimit: number; whatsappConnectionLimit: number; monthlyMessages: number };
+type Plan = { plan: string; status: string; groups: number; whatsappConnections: number;
+  billingInterval: "MONTHLY" | "YEARLY"; unlimitedTextTranslations: boolean; periodEnd: string | null };
+type Price = { code: string; name: string; monthlyCents: number; yearlyCents: number;
+  whatsappConnections: number; groups: number };
 
 export function WorkspaceActivity() {
   const [audits, setAudits] = useState<Audit[]>([]);
   const [activations, setActivations] = useState<Activation[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [offers, setOffers] = useState<PlanOffer[]>([]);
+  const [pricing, setPricing] = useState<Price[]>([]);
   const [gateway, setGateway] = useState("CHECKING");
   const [error, setError] = useState("");
   useEffect(() => {
@@ -149,14 +150,14 @@ export function WorkspaceActivity() {
       portalRequest<{ activations: Activation[] }>("/activations", undefined, "GET"),
       portalRequest<{ subscription: Plan }>("/subscription", undefined, "GET"),
       portalRequest<{ status: string }>("/connection", undefined, "GET"),
-      portalRequest<{ plans: PlanOffer[] }>("/plans", undefined, "GET")
+      portalRequest<{ plans: Price[] }>("/plans", undefined, "GET")
     ]).then(([auditsData, activationsData, subscriptionData, connectionData, catalogData]) => {
       if (!mounted) return;
       setAudits(auditsData.events);
       setActivations(activationsData.activations);
       setPlan(subscriptionData.subscription);
+      setPricing(catalogData.plans);
       setGateway(connectionData.status);
-      setOffers(catalogData.plans);
     }).catch(err => { if (mounted) setError(err instanceof Error ? err.message : "Unable to load activity"); });
     return () => { mounted = false; };
   }, []);
@@ -167,26 +168,17 @@ export function WorkspaceActivity() {
       <div className="detail"><span>Shared WhatsApp gateway</span><strong>{gateway}</strong></div>
       <div className="detail"><span>Subscription</span><strong>{plan?.plan ?? "Loading"}</strong></div>
       <div className="detail"><span>Status</span><strong>{plan?.status ?? "Loading"}</strong></div>
-      <div className="detail"><span>Group limit</span><strong>{plan?.groups ?? "—"}</strong></div>
-      <div className="detail"><span>WhatsApp numbers</span><strong>{plan ? (plan.whatsappConnections === 0 ? "Pilot allowance" : plan.whatsappConnections) : "—"}</strong></div>
-      <div className="detail"><span>Messages per month</span><strong>{plan ? (plan.messagesPerMonth === 0 ? "Unlimited text" : plan.messagesPerMonth.toLocaleString()) : "—"}</strong></div>
-      <p className="muted text-small">Billing is not connected yet. Plans are assigned by W-Bot administrators.</p>
-    </section>
-    <section className="panel subscription-offers-panel">
-      <div className="eyebrow">W-BOT SUBSCRIPTIONS</div>
-      <h3>Available plans</h3>
-      <p className="muted text-small">USD pricing. Annual billing includes two months free. Unlimited text translations are subject to fair use.</p>
-      <div className="subscription-plan-grid">
-        {offers.map(offer => <article key={offer.code} className={"subscription-tier" + (plan?.plan === offer.code ? " is-current" : "")}>
-          <div className="subscription-tier-head"><strong>{offer.name}</strong>{plan?.plan === offer.code && <span className="status on">Your plan</span>}</div>
-          <div className="subscription-price">${offer.monthlyUsd}<small>/month</small></div>
-          <p className="muted text-small">${offer.yearlyUsd.toLocaleString()} billed annually</p>
-          <div className="detail"><span>WhatsApp numbers</span><strong>{offer.whatsappConnectionLimit}</strong></div>
-          <div className="detail"><span>Groups</span><strong>{offer.groupLimit}</strong></div>
-          <div className="detail"><span>Text translations</span><strong>Unlimited</strong></div>
-        </article>)}
-      </div>
-      <p className="muted text-small">Online payments and self-service upgrades are not enabled; Platform Admin assigns plans.</p>
+      <div className="detail"><span>Registered groups</span><strong>{plan?.groups ?? "—"}</strong></div>
+       <div className="detail"><span>WhatsApp numbers</span><strong>{plan ? (plan.whatsappConnections === 0 ? "Unlimited pilot" : plan.whatsappConnections) : "—"}</strong></div>
+       <div className="detail"><span>Billing interval</span><strong>{plan?.billingInterval === "YEARLY" ? "Yearly" : "Monthly"}</strong></div>
+      <div className="detail"><span>Text translations</span><strong>Unlimited</strong></div>
+      <p className="muted text-small">Published prices are for reference. No payment checkout is enabled; subscriptions are assigned by platform administrators.</p>
+       <div className="wbot-price-catalog">{pricing.map(tier =>
+         <div key={tier.code} className={"wbot-price-row" + (plan?.plan === tier.code ? " is-selected" : "")}>
+           <div><strong>{tier.name}</strong><small>{tier.whatsappConnections} numbers · {tier.groups} groups · Unlimited text</small></div>
+           <div><strong>${(tier.monthlyCents / 100).toFixed(0)}/mo</strong>
+             <small>${(tier.yearlyCents / 100).toLocaleString("en-US")}/yr</small></div>
+         </div>)}</div>
     </section>
     <section className="panel"><div className="eyebrow">SECURITY HISTORY</div>
       <h3>Recent workspace activity</h3>

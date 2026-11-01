@@ -7,7 +7,6 @@ import { allowAttempt, requirePortalAuth, requireMutationHeader,
   verifyPassword, hashPassword, digest, SESSION_COOKIE, sessionCookie } from "./portal-auth.js";
 import { mailConfigured, sendAccountEmail, issueAccountToken } from "./mailer.js";
 import { getTenantLimits } from "./quotas.js";
-import { PAID_PLANS } from "./plan-catalog.js";
 
 const address = z.object({ email: z.string().email().max(191).transform(s => s.toLowerCase()) }).strict();
 const newPassword = z.string().min(12).max(128);
@@ -151,12 +150,6 @@ export function registerAccountRoutes(app: FastifyInstance, prisma: PrismaClient
       orderBy: { createdAt: "desc" }, take: 50
     });
     return { events };
-  });
-
-  app.get("/portal/api/plans", async (req, reply) => {
-    const user = await requirePortalAuth(prisma, req, reply);
-    if (!user) return;
-    return { plans: PAID_PLANS, billingEnabled: false };
   });
 
   app.get("/portal/api/subscription", async (req, reply) => {
