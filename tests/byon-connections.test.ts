@@ -123,6 +123,7 @@ test("customer-owned connection policy defaults to disabled in a fresh database"
     portalSession:{findUnique:async()=>session},
     whatsAppConnectionPolicy:{findUnique:async()=>null},
     tenantSubscription:{findUnique:async()=>null},
+    alertSubscription:{findUnique:async()=>null},
     group:{count:async()=>0},
     customerWhatsAppConnection:{findMany:async()=>[]}
   } as unknown as PrismaClient;
@@ -179,8 +180,10 @@ test("pilot allows multiple numbers when global and plan allowances are zero",as
       { id:"number-1",active:true },{id:"number-2",active:true}
     ]},
     tenantSubscription:{findUnique:async()=>({
+      planCode:"PILOT",status:"ACTIVE",periodEnd:null,
       whatsappConnectionLimit:0,groupLimit:1
     })},
+    alertSubscription:{findUnique:async()=>null},
     group:{count:async()=>1}
   } as unknown as PrismaClient;
   const app=Fastify();registerByonPortalRoutes(app,db,cfg);
@@ -201,8 +204,10 @@ test("per-workspace subscription overrides unlimited global allowance",async()=>
     })},
     customerWhatsAppConnection:{findMany:async()=>[]},
     tenantSubscription:{findUnique:async()=>({
+      planCode:"PILOT",status:"ACTIVE",periodEnd:null,
       whatsappConnectionLimit:5,groupLimit:2
     })},
+    alertSubscription:{findUnique:async()=>null},
     group:{count:async()=>0}
   } as unknown as PrismaClient;
   const app=Fastify();registerByonPortalRoutes(app,db,cfg);

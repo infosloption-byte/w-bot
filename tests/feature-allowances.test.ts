@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { sharedConnectionAllowance } from "../src/feature-allowances.js";
 
 const translation = (status: string, planCode = "STARTER") =>
-  ({ planCode, status, periodEnd: null, groupLimit: 10, whatsappConnectionLimit: 1 });
+  ({ planCode, status, periodEnd: null, groupLimit: 10,
+    whatsappConnectionLimit: planCode === "PILOT" ? 0 : 1 });
 const alerts = (status: string, maxConnections = 2) =>
   ({ status, periodEnd: null, maxConnections });
 
