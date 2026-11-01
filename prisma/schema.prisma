@@ -46,6 +46,8 @@ model Tenant {
   watchEvents WatchEvent[]
   alertMatches AlertMatch[]
   alertUsage AlertUsage[]
+  alertNotification AlertNotificationChannel?
+  alertDeliveries AlertDelivery[]
   auditEvents TenantAudit[]
   whatsappConnections CustomerWhatsAppConnection[]
 }
@@ -400,9 +402,52 @@ model AlertMatch {
   contactNumber     String? @db.VarChar(32)
   quotedPrice       Int?
   isRead            Boolean @default(false)
+  criteriaSnapshot  Json?
+  delivery          AlertDelivery?
   createdAt         DateTime @default(now())
 
   @@unique([watchEventId, watchRuleId])
+  @@index([tenantId, createdAt])
+}
+
+
+enum AlertDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  UNCERTAIN
+  CANCELED
+}
+
+model AlertNotificationChannel {
+  tenantId      String  @id @db.VarChar(191)
+  tenant        Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectionId  String  @db.VarChar(191)
+  groupId       String  @db.VarChar(191)
+  groupName     String  @db.VarChar(191)
+  enabled       Boolean @default(false)
+  consentAt     DateTime
+  updatedAt     DateTime @updatedAt
+}
+
+model AlertDelivery {
+  id            String @id @default(cuid()) @db.VarChar(191)
+  tenantId      String @db.VarChar(191)
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  alertMatchId  String @unique @db.VarChar(191)
+  match         AlertMatch @relation(fields: [alertMatchId], references: [id], onDelete: Cascade)
+  connectionId  String @db.VarChar(191)
+  groupId       String @db.VarChar(191)
+  status        AlertDeliveryStatus @default(PENDING)
+  attempts      Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  startedAt     DateTime?
+  sentAt        DateTime?
+  outboundId    String? @db.VarChar(191)
+  createdAt     DateTime @default(now())
+
+  @@index([status, nextAttemptAt])
   @@index([tenantId, createdAt])
 }
 
