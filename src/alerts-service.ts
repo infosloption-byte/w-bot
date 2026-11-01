@@ -37,6 +37,17 @@ class AlertAllowanceReached extends Error {}
  * inbox rows. Every accepted event clears raw text after processing.
  */
 export async function processPendingAlerts(prisma: PrismaClient): Promise<number> {
+  // Recover a worker crash after it claimed a job. A claimed job's lease
+  // expires after five minutes. The unique (event,rule) key avoids repeats.
+  const now = new Date();
+  await prisma.watchEvent.updateMany({
+    where: { status: "PROCESSING", attempts: { lt: 3 }, nextAttemptAt: { lt: now } },
+    data: { status: "FAILED" }
+  });
+  await prisma.watchEvent.updateMany({
+    where: { status: "PROCESSING", attempts: { gte: 3 }, nextAttemptAt: { lt: now } },
+    data: { status: "FAILED", content: null }
+  });
   const pending = await prisma.watchEvent.findMany({
     where: {
       status: { in: ["PENDING", "FAILED"] },
@@ -48,7 +59,8 @@ export async function processPendingAlerts(prisma: PrismaClient): Promise<number
   for (const event of pending) {
     const claim = await prisma.watchEvent.updateMany({
       where: { id: event.id, status: event.status, attempts: { lt: 3 } },
-      data: { status: "PROCESSING", attempts: { increment: 1 } }
+      data: { status: "PROCESSING", attempts: { increment: 1 },
+        nextAttemptAt: new Date(Date.now() + 5 * 60_000) }
     });
     if (!claim.count) continue;
     try {
