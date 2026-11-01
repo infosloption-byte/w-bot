@@ -62,3 +62,20 @@
   .alert-detail-grid{grid-template-columns:1fr 1fr}
   .alert-detail-drawer{width:100%}
 }
+
+/* Shared custom picker: modern popover options, never the native browser menu. */
+.alert-picker{position:relative;min-width:0}
+.alert-picker-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:9px;
+  min-height:44px;padding:11px 13px;text-align:left;border:1px solid #425571;border-radius:11px;
+  background:#17283e;color:#f2f7ff;font-size:12px;font-weight:700}
+.alert-picker-trigger:hover:not(:disabled){border-color:#9daaf2;background:#223653}
+.alert-picker-trigger:disabled{opacity:.55;cursor:not-allowed}
+.alert-picker-trigger>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alert-picker-panel{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:100;
+  display:grid;gap:3px;max-height:270px;overflow-y:auto;background:#17253c;
+  border:1px solid #526689;border-radius:13px;padding:7px;box-shadow:0 12px 32px #02050e99}
+.alert-picker-choice{width:100%;border:0;border-radius:8px;text-align:left;background:transparent;
+  color:#d8e4fb;min-height:38px;padding:10px;overflow-wrap:anywhere}
+.alert-picker-choice:hover,.alert-picker-choice:focus-visible{background:#2b3f61}
+.alert-picker-choice.is-selected{background:#354878;color:#f0f4ff;font-weight:800}
+.alert-picker-empty{padding:12px;color:#a7bad0;font-size:12px}
