@@ -433,7 +433,7 @@ let processingAlerts = false;
 const alertsTimer = setInterval(async () => {
   if (processingAlerts) return;
   processingAlerts = true;
-  try { await processPendingAlerts(prisma); }
+  try { await processPendingAlerts(prisma, cfg); }
   catch { app.log.error("Smart Alerts worker cycle failed"); }
   finally { processingAlerts = false; }
 }, 1200);

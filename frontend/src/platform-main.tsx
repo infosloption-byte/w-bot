@@ -15,7 +15,8 @@ type Plan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCE
   groupLimit: number; whatsappConnectionLimit: number; billingInterval: "MONTHLY" | "YEARLY"; periodEnd: string | null };
 type AlertPlan = { planCode: string; status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED";
   billingInterval: "MONTHLY" | "YEARLY"; enabled: boolean;
-  maxGroups: number; maxConnections: number; maxRules: number; maxMatchesPerMonth: number; periodEnd: string | null };
+  maxGroups: number; maxConnections: number; maxRules: number; maxMatchesPerMonth: number;
+  maxAnalysesPerMonth: number; periodEnd: string | null };
 type CatalogPlan = { code: string; name: string; monthlyCents: number; yearlyCents: number; whatsappConnections: number; groups: number };
 type Tenant = { id: string; name: string; createdAt: string; groupCount: number; monthUsage: number;
   memberCount: number; owner: { email: string; displayName: string } | null; subscription: Plan | null; alertSubscription: AlertPlan | null };
@@ -87,6 +88,7 @@ function Console() {
   const [alertConnections, setAlertConnections] = useState(1);
   const [alertRules, setAlertRules] = useState(5);
   const [alertMatches, setAlertMatches] = useState(100);
+  const [alertAnalyses, setAlertAnalyses] = useState(500);
   const [planCode, setPlanCode] = useState("PILOT");
   const [planStatus, setPlanStatus] = useState<Plan["status"]>("TRIAL");
   const [groupLimit, setGroupLimit] = useState(3);
@@ -187,6 +189,7 @@ function Console() {
     setAlertConnections(t.alertSubscription?.maxConnections ?? 1);
     setAlertRules(t.alertSubscription?.maxRules ?? 5);
     setAlertMatches(t.alertSubscription?.maxMatchesPerMonth ?? 100);
+    setAlertAnalyses(t.alertSubscription?.maxAnalysesPerMonth ?? 500);
     setError(""); setNotice("");
   }
   async function saveAlertPlan(event: React.FormEvent) {
@@ -198,7 +201,8 @@ function Console() {
         method: "PATCH",
         body: JSON.stringify({
           planCode: alertCode, status: alertStatus, billingInterval: alertInterval,
-          maxGroups: alertGroups, maxConnections: alertConnections, maxRules: alertRules, maxMatchesPerMonth: alertMatches,
+          maxGroups: alertGroups, maxConnections: alertConnections, maxRules: alertRules,
+          maxMatchesPerMonth: alertMatches, maxAnalysesPerMonth: alertAnalyses,
           periodEnd: alertEditing.alertSubscription?.periodEnd ?? null
         })
       });
@@ -592,6 +596,8 @@ function Console() {
             onChange={e=>setAlertRules(Number(e.target.value))}/></label>
           <label>Matches per month<input type="number" min={1} max={100000} value={alertMatches}
             onChange={e=>setAlertMatches(Number(e.target.value))}/></label>
+          <label>AI analyses per month<input type="number" min={1} max={100000} value={alertAnalyses}
+            onChange={e => setAlertAnalyses(Number(e.target.value))}/></label>
           <div className="modal-actions">
             <button className="button secondary" type="button" disabled={busy} onClick={()=>setAlertEditing(null)}>Cancel</button>
             <button className="button primary" type="submit" disabled={busy}>Assign Alerts entitlement</button>

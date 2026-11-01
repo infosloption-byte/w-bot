@@ -6,6 +6,7 @@ import { requirePortalAuth, requireMutationHeader } from "./portal-auth.js";
 import { planActive, monthKey } from "./quotas.js";
 import { byonRequest, connectionTypeAllowed, isConnectionId } from "./byon-shared.js";
 import { isWebGroupId } from "./gateways.js";
+import { searchParameters } from "./alerts-ai.js";
 
 const editMode = z.object({ enabled: z.boolean() }).strict();
 const sourceInput = z.object({
@@ -13,27 +14,22 @@ const sourceInput = z.object({
   groupId: z.string().refine(isWebGroupId),
   consentConfirmed: z.literal(true)
 }).strict();
-const ruleShape = z.object({
-  name: z.string().trim().min(2).max(100),
-  category: z.enum(["GENERIC", "TOUR"]).default("GENERIC"),
-  keywords: z.string().trim().min(2).max(500).refine(
-    value => value.split(",").some(word => word.trim().length >= 2),
-    "Add at least one matching phrase"
-  ),
-  origin: z.string().trim().max(100).nullable().optional(),
-  destination: z.string().trim().max(100).nullable().optional(),
-  minPrice: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
-  maxPrice: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
-  requireContact: z.boolean().default(false),
-  enabled: z.boolean().default(true)
+const bulkSourceInput = z.object({
+  connectionId: z.string().refine(isConnectionId),
+  groupIds: z.array(z.string().refine(isWebGroupId)).min(1).max(50)
+    .refine(items => new Set(items).size === items.length, "Group IDs must be unique"),
+  consentConfirmed: z.literal(true)
 }).strict();
-const validFare = (value: { minPrice?: number | null; maxPrice?: number | null }) =>
-  value.minPrice == null || value.maxPrice == null || value.minPrice <= value.maxPrice;
-const ruleInput = ruleShape.refine(validFare, "Minimum fare cannot exceed maximum fare");
-const patchRule = ruleShape.partial().refine(
-  value => Object.keys(value).length > 0 && validFare(value),
-  "Set at least one field and keep fare bounds valid"
-);
+
+// Rules are generic: arbitrary user-defined labels and plain-language values.
+// No category, location, fare or keyword field is required in new rules.
+const ruleInput = z.object({
+  name: z.string().trim().min(2).max(100),
+  parameters: searchParameters
+}).strict();
+const ruleUpdate = ruleInput.partial().extend({ enabled: z.boolean().optional() }).strict()
+  .refine(input => Object.keys(input).length > 0);
+
 const isAdmin = (role: string) => role !== "VIEWER";
 const ensureCurrentAlerts = async (prisma: PrismaClient, tenantId: string) => {
   const sub = await prisma.alertSubscription.findUnique({ where: { tenantId } });
@@ -51,6 +47,7 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
     ]);
     return {
       billingEnabled: false,
+      alertsAiReady: cfg.ALERTS_AI_ENABLED === "true",
       translation: {
         subscribed: !!translation, enabled: translation?.translationEnabled ?? true,
         active: !!translation && planActive(translation),
@@ -170,6 +167,68 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
     }
   });
 
+  // One selected connection, multiple explicitly opted-in groups, atomic quota.
+  app.post("/portal/api/alerts/groups/bulk", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    if (!isAdmin(user.role)) return reply.code(403).send({ error: "Workspace admin required" });
+    const input = bulkSourceInput.parse(req.body);
+    if (cfg.BYON_GATEWAY_ENABLED !== "true")
+      return reply.code(403).send({ error: "Customer gateway is unavailable" });
+    const conn = await prisma.customerWhatsAppConnection.findFirst({
+      where: { id: input.connectionId, tenantId: user.tenantId,
+        active: true, status: "CONNECTED" }
+    });
+    if (!conn) return reply.code(403).send({ error: "Connected customer account required" });
+    const policy = await prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } });
+    if (!policy || !connectionTypeAllowed(policy, conn.kind))
+      return reply.code(403).send({ error: "Connection type unavailable" });
+    let discovered: Array<{ groupId: string; name: string }> = [];
+    try {
+      const response = await byonRequest(cfg, "/connections/" + conn.id + "/groups");
+      if (!response.ok) return reply.code(503).send({ error: "Unable to verify group membership" });
+      const body = await response.json() as { groups?: Array<{ groupId: string; name: string }> };
+      discovered = body.groups ?? [];
+    } catch { return reply.code(503).send({ error: "Unable to verify group membership" }); }
+    const members = new Map(discovered.filter(g => isWebGroupId(g.groupId))
+      .map(g => [g.groupId, g.name]));
+    if (!input.groupIds.every(id => members.has(id)))
+      return reply.code(403).send({ error: "One or more selected groups are not joined by this account" });
+    const result = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM Tenant WHERE id = ${user.tenantId} FOR UPDATE`;
+      const sub = await tx.alertSubscription.findUnique({ where: { tenantId: user.tenantId } });
+      if (!sub?.enabled || !planActive(sub)) return null;
+      const existing = await tx.watchGroup.findMany({
+        where: { tenantId: user.tenantId, connectionId: conn.id,
+          whatsappGroupId: { in: input.groupIds } },
+        select: { id: true, whatsappGroupId: true }
+      });
+      const already = new Set(existing.map(g => g.whatsappGroupId));
+      const newIds = input.groupIds.filter(id => !already.has(id));
+      const used = await tx.watchGroup.count({ where: { tenantId: user.tenantId } });
+      if (used + newIds.length > sub.maxGroups) return null;
+      // Reactivate previously paused groups, but never enroll unselected groups.
+      if (existing.length) await tx.watchGroup.updateMany({
+        where: { tenantId: user.tenantId, id: { in: existing.map(g => g.id) } },
+        data: { enabled: true, consentAt: new Date() }
+      });
+      if (newIds.length) await tx.watchGroup.createMany({ data: newIds.map(id => ({
+        tenantId: user.tenantId, connectionId: conn.id, whatsappGroupId: id,
+        name: (members.get(id) ?? "").slice(0, 191), enabled: true,
+        consentAt: new Date()
+      })) });
+      await tx.tenantAudit.create({ data: {
+        tenantId: user.tenantId, actorId: user.userId, action: "ALERT_SOURCES_SELECTED"
+      } });
+      return { added: newIds.length, enabled: input.groupIds.length };
+    });
+    if (!result) return reply.code(409).send({
+      error: "Not enough group slots or Smart Alerts subscription inactive"
+    });
+    return reply.code(201).send(result);
+  });
+
   app.patch<{ Params: { id: string } }>("/portal/api/alerts/groups/:id", async (req, reply) => {
     if (!requireMutationHeader(req, reply)) return;
     const user = await requirePortalAuth(prisma, req, reply);
@@ -215,7 +274,10 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
       if (!entitlement?.enabled || !planActive(entitlement)) return null;
       const used = await tx.watchRule.count({ where: { tenantId: user.tenantId } });
       if (used >= entitlement.maxRules) return null;
-      return tx.watchRule.create({ data: { ...input, tenantId: user.tenantId } });
+      return tx.watchRule.create({ data: {
+        name: input.name, parameters: input.parameters, tenantId: user.tenantId,
+        keywords: "", category: "GENERIC"
+      } });
     });
     return created ? reply.code(201).send({ rule: created }) :
       reply.code(409).send({ error: "Smart Alerts subscription inactive or rule limit reached" });
@@ -226,9 +288,21 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
     const user = await requirePortalAuth(prisma, req, reply);
     if (!user) return;
     if (!isAdmin(user.role)) return reply.code(403).send({ error: "Workspace admin required" });
-    const input = patchRule.parse(req.body);
+    const input = ruleUpdate.parse(req.body);
+    const current = await prisma.watchRule.findFirst({
+      where: { id: req.params.id, tenantId: user.tenantId },
+      select: { id: true }
+    });
+    if (!current) return reply.code(404).send({ error: "Rule not found" });
     const changed = await prisma.watchRule.updateMany({
-      where: { id: req.params.id, tenantId: user.tenantId }, data: input
+      where: { id: current.id, tenantId: user.tenantId },
+      data: {
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.parameters === undefined ? {} : {
+          parameters: input.parameters, keywords: "", category: "GENERIC"
+        }),
+        ...(input.enabled === undefined ? {} : { enabled: input.enabled })
+      }
     });
     if (!changed.count) return reply.code(404).send({ error: "Rule not found" });
     return { saved: true };
@@ -281,7 +355,10 @@ export function registerAlertsRoutes(app: FastifyInstance, prisma: PrismaClient,
       prisma.watchGroup.count({ where: { tenantId: user.tenantId } }),
       prisma.watchRule.count({ where: { tenantId: user.tenantId } })
     ]);
-    return { used: usage?.matches ?? 0, groups, rules,
-      limits: sub ? { matchesPerMonth: sub.maxMatchesPerMonth, groups: sub.maxGroups, rules: sub.maxRules } : null };
+    return { used: usage?.matches ?? 0, analyses: usage?.analyses ?? 0, groups, rules,
+      limits: sub ? {
+        matchesPerMonth: sub.maxMatchesPerMonth, analysesPerMonth: sub.maxAnalysesPerMonth,
+        groups: sub.maxGroups, rules: sub.maxRules
+      } : null };
   });
 }

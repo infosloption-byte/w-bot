@@ -318,6 +318,7 @@ model AlertSubscription {
   maxConnections    Int      @default(1)
   maxRules          Int      @default(5)
   maxMatchesPerMonth Int     @default(100)
+  maxAnalysesPerMonth Int    @default(500)
   periodEnd         DateTime?
   updatedAt         DateTime @updatedAt
 }
@@ -352,7 +353,8 @@ model WatchRule {
   tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name            String   @db.VarChar(100)
   category        String   @default("GENERIC") @db.VarChar(20)
-  keywords        String   @db.VarChar(500)
+  keywords        String   @db.VarChar(500) // Legacy rule compatibility only
+  parameters      Json?    // Array of customer-defined {label,value} search requirements
   origin          String?  @db.VarChar(100)
   destination     String?  @db.VarChar(100)
   minPrice        Int?
@@ -408,6 +410,7 @@ model AlertUsage {
   tenantId String @db.VarChar(191)
   month    String @db.VarChar(7)
   matches  Int @default(0)
+  analyses Int @default(0)
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@id([tenantId, month])
 }

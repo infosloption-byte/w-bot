@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { evaluateWatchRule } from "./alerts-matcher.js";
+import { analyzeAlertMessage, searchParameters, type SemanticMatch, type SemanticRule } from "./alerts-ai.js";
 import { planActive, monthKey } from "./quotas.js";
 import type { Config } from "./config.js";
 import { connectionTypeAllowed } from "./byon-shared.js";
@@ -36,7 +37,10 @@ class AlertAllowanceReached extends Error {}
  * group send endpoint is invoked by this worker. All notifications are private
  * inbox rows. Every accepted event clears raw text after processing.
  */
-export async function processPendingAlerts(prisma: PrismaClient): Promise<number> {
+export async function processPendingAlerts(
+  prisma: PrismaClient, cfg?: Config,
+  analyze: typeof analyzeAlertMessage = analyzeAlertMessage
+): Promise<number> {
   // Recover a worker crash after it claimed a job. A claimed job's lease
   // expires after five minutes. The unique (event,rule) key avoids repeats.
   const now = new Date();
@@ -68,25 +72,62 @@ export async function processPendingAlerts(prisma: PrismaClient): Promise<number
       if (event.content && event.group.enabled && event.group.tenantId === event.tenantId &&
           sub?.enabled && planActive(sub)) {
         const rules = await prisma.watchRule.findMany({
-          where: { tenantId: event.tenantId, enabled: true }, take: 100
+          where: { tenantId: event.tenantId, enabled: true }, take: 500
         });
+        const matches = new Map<string, SemanticMatch>();
+        const aiRules: SemanticRule[] = [];
         for (const rule of rules) {
-          const match = evaluateWatchRule(event.content, rule);
+          if (rule.parameters != null) {
+            const parsed = searchParameters.safeParse(rule.parameters);
+            if (parsed.success) aiRules.push({
+              id: rule.id, name: rule.name, parameters: parsed.data
+            });
+          } else {
+            // Existing customers' previously saved keyword rules still work.
+            const match = evaluateWatchRule(event.content, rule);
+            if (match) matches.set(rule.id, match);
+          }
+        }
+        if (aiRules.length && cfg?.ALERTS_AI_ENABLED === "true") {
+          // One independently metered AI request per batch of <=20 rules.
+          // A quota exhaustion skips AI processing, never translation.
+          for (let i = 0; i < aiRules.length; i += 20) {
+            const batch = aiRules.slice(i, i + 20);
+            const currentMonth = monthKey();
+            const allowed = await prisma.$transaction(async tx => {
+              const active = await tx.alertSubscription.findUnique({
+                where: { tenantId: event.tenantId }
+              });
+              if (!active?.enabled || !planActive(active)) return false;
+              await tx.$executeRaw`INSERT IGNORE INTO AlertUsage (tenantId, month, matches, analyses)
+                VALUES (${event.tenantId}, ${currentMonth}, 0, 0)`;
+              const reserved = await tx.alertUsage.updateMany({
+                where: { tenantId: event.tenantId, month: currentMonth,
+                  analyses: { lt: active.maxAnalysesPerMonth } },
+                data: { analyses: { increment: 1 } }
+              });
+              return reserved.count === 1;
+            }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+            if (!allowed) break;
+            const found = await analyze(cfg, event.content, batch);
+            for (const [id, match] of found) matches.set(id, match);
+          }
+        }
+        for (const rule of rules) {
+          const match = matches.get(rule.id);
           if (!match) continue;
           try {
             await prisma.$transaction(async tx => {
-              // Serialize with subscription changes and source/removal edits.
               const current = await tx.alertSubscription.findUnique({
                 where: { tenantId: event.tenantId }
               });
               if (!current?.enabled || !planActive(current)) return;
-              // Create first; a duplicate never consumes a second alert allowance.
               await tx.alertMatch.create({
                 data: { tenantId: event.tenantId, watchEventId: event.id,
                   watchRuleId: rule.id, ...match }
               });
-              await tx.$executeRaw`INSERT IGNORE INTO AlertUsage (tenantId, month, matches)
-                VALUES (${event.tenantId}, ${monthKey()}, 0)`;
+              await tx.$executeRaw`INSERT IGNORE INTO AlertUsage (tenantId, month, matches, analyses)
+                VALUES (${event.tenantId}, ${monthKey()}, 0, 0)`;
               const reserved = await tx.alertUsage.updateMany({
                 where: { tenantId: event.tenantId, month: monthKey(),
                   matches: { lt: current.maxMatchesPerMonth } },
