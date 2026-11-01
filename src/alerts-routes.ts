@@ -13,7 +13,7 @@ const sourceInput = z.object({
   groupId: z.string().refine(isWebGroupId),
   consentConfirmed: z.literal(true)
 }).strict();
-const ruleInput = z.object({
+const ruleShape = z.object({
   name: z.string().trim().min(2).max(100),
   category: z.enum(["GENERIC", "TOUR"]).default("GENERIC"),
   keywords: z.string().trim().min(2).max(500).refine(
@@ -26,9 +26,14 @@ const ruleInput = z.object({
   maxPrice: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
   requireContact: z.boolean().default(false),
   enabled: z.boolean().default(true)
-}).strict().refine(value => value.minPrice == null || value.maxPrice == null ||
-  value.minPrice <= value.maxPrice, "Minimum fare cannot exceed maximum fare");
-const patchRule = ruleInput.partial().refine(value => Object.keys(value).length > 0);
+}).strict();
+const validFare = (value: { minPrice?: number | null; maxPrice?: number | null }) =>
+  value.minPrice == null || value.maxPrice == null || value.minPrice <= value.maxPrice;
+const ruleInput = ruleShape.refine(validFare, "Minimum fare cannot exceed maximum fare");
+const patchRule = ruleShape.partial().refine(
+  value => Object.keys(value).length > 0 && validFare(value),
+  "Set at least one field and keep fare bounds valid"
+);
 const isAdmin = (role: string) => role !== "VIEWER";
 const ensureCurrentAlerts = async (prisma: PrismaClient, tenantId: string) => {
   const sub = await prisma.alertSubscription.findUnique({ where: { tenantId } });

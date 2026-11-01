@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { evaluateWatchRule } from "./alerts-matcher.js";
 import { planActive, monthKey } from "./quotas.js";
 import type { Config } from "./config.js";
+import { connectionTypeAllowed } from "./byon-shared.js";
 
 export async function ingestWatchedMessage(prisma: PrismaClient, cfg: Config, details: {
   connectionId: string; groupId: string; messageId: string; text: string
@@ -13,9 +14,11 @@ export async function ingestWatchedMessage(prisma: PrismaClient, cfg: Config, de
     where: {
       connectionId: details.connectionId, whatsappGroupId: details.groupId, enabled: true,
       connection: { active: true, status: "CONNECTED" }
-    }, select: { id: true, tenantId: true }
+    }, select: { id: true, tenantId: true, connection: { select: { kind: true } } }
   });
   if (!group) return false;
+  const policy = await prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } });
+  if (!policy || !connectionTypeAllowed(policy, group.connection.kind)) return false;
   const sub = await prisma.alertSubscription.findUnique({ where: { tenantId: group.tenantId } });
   if (!sub?.enabled || !planActive(sub)) return false;
   const result = await prisma.watchEvent.createMany({

@@ -12,6 +12,8 @@ import { registerPortalRoutes } from "./portal.js";
 import { registerByonPortalRoutes } from "./byon-portal.js";
 import { byonAuthorized, connectionKey, connectionTypeAllowed } from "./byon-shared.js";
 import { registerPlatformRoutes } from "./platform.js";
+import { registerAlertsRoutes } from "./alerts-routes.js";
+import { ingestWatchedMessage, processPendingAlerts } from "./alerts-service.js";
 import { ingestTenantMessage } from "./quotas.js";
 import { runRetention } from "./retention.js";
 import { checkGatewayHealth } from "./gateway-health.js";
@@ -22,6 +24,7 @@ const provider = createTranslationProvider(cfg);
 registerPortalRoutes(app, prisma, cfg);
 registerByonPortalRoutes(app, prisma, cfg);
 registerPlatformRoutes(app, prisma, cfg);
+registerAlertsRoutes(app, prisma, cfg);
 
 function safeToken(given: string | undefined, expected: string): boolean {
   if (!given) return false;
@@ -110,6 +113,11 @@ async function enqueue(groupId: string, messageId: string, senderId: string, tex
   }
   if (group.tenantId) {
     if (!group.consentAt) return false;
+    const subscription = await prisma.tenantSubscription.findUnique({
+      where: { tenantId: group.tenantId },
+      select: { translationEnabled: true }
+    });
+    if (subscription?.translationEnabled === false) return false;
     return ingestTenantMessage(prisma, cfg, {
       tenantId: group.tenantId, groupId: group.id,
       messageId, senderId, text
@@ -162,10 +170,20 @@ app.post("/internal/byon/message", async (request, reply) => {
   if (!byonAuthorized(request.headers.authorization, cfg))
     return reply.code(401).send({ error: "Unauthorized" });
   const m = byonIngress.parse(request.body);
-  const accepted = await enqueue(
-    m.groupId, m.messageId, m.senderId, m.text, "WEB", connectionKey(m.connectionId)
-  );
-  return reply.code(202).send({ accepted });
+  // Two isolated pipelines receive the same authenticated live event.
+  // Failure in one never prevents delivery to the other.
+  const [translation, alerts] = await Promise.allSettled([
+    enqueue(m.groupId, m.messageId, m.senderId, m.text, "WEB", connectionKey(m.connectionId)),
+    ingestWatchedMessage(prisma, cfg, {
+      connectionId: m.connectionId, groupId: m.groupId,
+      messageId: m.messageId, text: m.text
+    })
+  ]);
+  if (translation.status === "rejected") app.log.error("Translation ingest failed");
+  if (alerts.status === "rejected") app.log.error("Smart Alerts ingest failed");
+  const translated = translation.status === "fulfilled" && translation.value;
+  const watched = alerts.status === "fulfilled" && alerts.value;
+  return reply.code(202).send({ accepted: translated || watched });
 });
 
 app.get("/api/gateways", async () => {
@@ -410,8 +428,20 @@ const timer = setInterval(async () => {
 }, 500);
 timer.unref();
 
+// A separate timer/queue can be paused or removed without changing translations.
+let processingAlerts = false;
+const alertsTimer = setInterval(async () => {
+  if (processingAlerts) return;
+  processingAlerts = true;
+  try { await processPendingAlerts(prisma); }
+  catch { app.log.error("Smart Alerts worker cycle failed"); }
+  finally { processingAlerts = false; }
+}, 1200);
+alertsTimer.unref();
+
 async function shutdown() {
   clearInterval(timer);
+  clearInterval(alertsTimer);
   clearInterval(maintenanceTimer);
   clearInterval(healthTimer);
   await app.close();

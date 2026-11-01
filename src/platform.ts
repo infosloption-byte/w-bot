@@ -30,6 +30,15 @@ const changePlan = z.object({
   whatsappConnectionLimit: z.number().int().min(0).max(1000).optional(),
   periodEnd: z.string().datetime().nullable().optional()
 }).strict();
+const alertSubscriptionChange = z.object({
+  planCode: z.string().trim().regex(/^ALERTS_[A-Z0-9_-]{2,20}$/),
+  status: z.enum(["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED"]),
+  billingInterval: z.enum(["MONTHLY", "YEARLY"]).default("MONTHLY"),
+  maxGroups: z.number().int().min(1).max(500),
+  maxRules: z.number().int().min(1).max(500),
+  maxMatchesPerMonth: z.number().int().min(1).max(100_000),
+  periodEnd: z.string().datetime().nullable().optional()
+}).strict();
 const languageName = z.string().trim().min(2).max(80)
   .regex(/^[\p{L}\p{M} .()'-]+$/u, "Use a language name without markup");
 const addLanguage = z.object({
@@ -188,6 +197,10 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
           take: 1, select: { messages: true }
         },
         _count: { select: { groups: true, members: true } },
+        alertSubscription: {
+          select: { planCode: true, status: true, enabled: true, billingInterval: true,
+            maxGroups: true, maxRules: true, maxMatchesPerMonth: true, periodEnd: true }
+        },
         subscription: {
           select: {
             planCode: true, billingInterval: true, status: true, groupLimit: true,
@@ -204,7 +217,8 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
       id: tenant.id, name: tenant.name, createdAt: tenant.createdAt,
       groupCount: tenant._count.groups, memberCount: tenant._count.members,
       monthUsage: tenant.usageBuckets[0]?.messages ?? 0,
-      owner: tenant.members[0]?.user ?? null, subscription: tenant.subscription
+      owner: tenant.members[0]?.user ?? null, subscription: tenant.subscription,
+      alertSubscription: tenant.alertSubscription
     })) };
   });
 
@@ -434,6 +448,46 @@ export function registerPlatformRoutes(app: FastifyInstance, prisma: PrismaClien
           : null
       }
     };
+  });
+
+  // Alerts are licensed independently; this endpoint never changes translation entitlements.
+  app.patch<{ Params: { id: string } }>("/portal/api/platform/tenants/:id/alerts/subscription", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const admin = await adminIdentity(prisma, req, reply);
+    if (!admin || !requiredSuperAdmin(admin, reply)) return;
+    const input = alertSubscriptionChange.parse(req.body);
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id }, select: { id: true }
+    });
+    if (!tenant) return reply.code(404).send({ error: "Workspace not found" });
+    const subscription = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM Tenant WHERE id = ${tenant.id} FOR UPDATE`;
+      const [groups, rules] = await Promise.all([
+        tx.watchGroup.count({ where: { tenantId: tenant.id } }),
+        tx.watchRule.count({ where: { tenantId: tenant.id } })
+      ]);
+      if (groups > input.maxGroups || rules > input.maxRules) return null;
+      const current = await tx.alertSubscription.findUnique({ where: { tenantId: tenant.id } });
+      const record = await tx.alertSubscription.upsert({
+        where: { tenantId: tenant.id },
+        create: { tenantId: tenant.id, ...input, enabled: false,
+          periodEnd: input.periodEnd ? new Date(input.periodEnd) : null },
+        update: { ...input,
+          ...(input.status === "PAST_DUE" || input.status === "CANCELED" ? { enabled: false } : {}),
+          periodEnd: input.periodEnd ? new Date(input.periodEnd) : null }
+      });
+      await tx.platformAudit.create({ data: {
+        adminId: admin.id, action: "ALERT_SUBSCRIPTION_UPDATED", targetId: tenant.id
+      } });
+      return record;
+    });
+    if (!subscription) return reply.code(409).send({ error: "Workspace exceeds alert group or rule limits" });
+    return { saved: true, subscription: {
+      planCode: subscription.planCode, status: subscription.status,
+      billingInterval: subscription.billingInterval, enabled: subscription.enabled,
+      maxGroups: subscription.maxGroups, maxRules: subscription.maxRules,
+      maxMatchesPerMonth: subscription.maxMatchesPerMonth, periodEnd: subscription.periodEnd
+    }, billingEnabled: false };
   });
 
   app.patch<{ Params: { id: string } }>("/portal/api/platform/groups/:id", async (req, reply) => {
