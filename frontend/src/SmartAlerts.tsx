@@ -4,27 +4,24 @@ import "./alerts.css";
 
 type Feature = {
   subscribed: boolean; enabled: boolean; active: boolean; status: string; planCode: string | null;
-  limits?: { groups: number; rules: number; matchesPerMonth: number } | null;
+  limits?: { groups: number; rules: number; matchesPerMonth: number; analysesPerMonth?: number } | null;
 };
-type Features = { translation: Feature; alerts: Feature; billingEnabled: boolean };
+type Features = { translation: Feature; alerts: Feature; billingEnabled: boolean; alertsAiReady: boolean };
 type Source = { id: string; name: string; enabled: boolean; connectionId: string; whatsappGroupId: string };
-type Rule = {
-  id: string; name: string; category: string; keywords: string; enabled: boolean;
-  origin: string | null; destination: string | null; minPrice: number | null; maxPrice: number | null;
-  requireContact: boolean
-};
+type SearchParameter = { label: string; value: string };
+type Rule = { id: string; name: string; keywords: string; enabled: boolean;
+  parameters: SearchParameter[] | null };
 type Match = {
   id: string; summary: string; quotedPrice: number | null; contactNumber: string | null;
   isRead: boolean; createdAt: string; rule: { name: string };
   event: { externalMessageId: string; group: { name: string } }
 };
-type Conn = { id: string; label: string; active: boolean; status: string };
+type Conn = { id: string; label: string; kind?: string; phoneLast4?: string | null;
+  active: boolean; status: string };
 type Discovered = { groupId: string; name: string };
-type Usage = { used: number; groups: number; rules: number;
-  limits: { matchesPerMonth: number; groups: number; rules: number } | null };
-const emptyRule = { name: "", category: "GENERIC", keywords: "",
-  origin: "", destination: "", minPrice: "", maxPrice: "", requireContact: false };
-type RuleForm = typeof emptyRule;
+type Usage = { used: number; analyses: number; groups: number; rules: number;
+  limits: { matchesPerMonth: number; analysesPerMonth: number; groups: number; rules: number } | null };
+const blankParameter = (): SearchParameter => ({ label: "", value: "" });
 
 export function FeatureHub(props: { onOpenAlerts: () => void }) {
   const [data, setData] = useState<Features | null>(null);
@@ -78,10 +75,14 @@ export function SmartAlerts() {
   const [connections, setConnections] = useState<Conn[]>([]);
   const [discovered, setDiscovered] = useState<Discovered[]>([]);
   const [connectionId, setConnectionId] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState("");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [groupsLoading, setGroupsLoading] = useState(false);
   const [consent, setConsent] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [form, setForm] = useState<RuleForm>(emptyRule);
+  const [ruleName, setRuleName] = useState("");
+  const [parameters, setParameters] = useState<SearchParameter[]>([blankParameter()]);
+  const [editingRule, setEditingRule] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -96,37 +97,64 @@ export function SmartAlerts() {
       portalRequest<{connections: Conn[]}>("/connections",undefined,"GET")
     ]);
     setFeatures(f); setSources(groups.groups); setRules(r.rules); setMatches(inbox.matches);
-    setUsage(metric); setConnections(conn.connections.filter(c=>c.active&&c.status==="CONNECTED"));
+    setUsage(metric);
+    const active = conn.connections.filter(c => c.active && c.status === "CONNECTED");
+    setConnections(active);
+    setConnectionId(current => active.some(c => c.id === current) ? current : (active[0]?.id ?? ""));
   }, []);
   useEffect(() => { void refresh().catch(e=>setError(e instanceof Error?e.message:"Unable to load alerts")); }, [refresh]);
   useEffect(() => {
-    if (!connectionId) { setDiscovered([]); return; }
+    if (!connectionId) { setDiscovered([]); setSelectedGroups([]); return; }
     let alive = true;
-    void portalRequest<{groups: Discovered[]}>("/connections/"+encodeURIComponent(connectionId)+"/groups",undefined,"GET")
+    setGroupsLoading(true); setDiscovered([]); setSelectedGroups([]);
+    void portalRequest<{ groups: Discovered[] }>("/connections/" + encodeURIComponent(connectionId) + "/groups",
+      undefined, "GET")
       .then(result => { if (alive) setDiscovered(result.groups); })
-      .catch(e => { if (alive) setError(e instanceof Error ? e.message : "Unable to discover groups"); });
-    return () => { alive=false; };
+      .catch(e => { if (alive) setError(e instanceof Error ? e.message : "Unable to discover groups"); })
+      .finally(() => { if (alive) setGroupsLoading(false); });
+    return () => { alive = false; };
   }, [connectionId]);
 
-  async function action(fn: () => Promise<unknown>, message: string) {
+  async function action(fn: () => Promise<unknown>, message: string): Promise<boolean> {
     setBusy(true); setError(""); setSuccess("");
-    try { await fn(); await refresh(); setSuccess(message); }
-    catch (e) { setError(e instanceof Error ? e.message : "Action failed"); }
+    try { await fn(); await refresh(); setSuccess(message); return true; }
+    catch (e) { setError(e instanceof Error ? e.message : "Action failed"); return false; }
     finally { setBusy(false); }
   }
-  async function addGroup() {
-    await action(() => portalRequest("/alerts/groups",{
-      connectionId, groupId: selectedGroup, consentConfirmed: true
-    }), "Group added to Smart Alerts. Translation settings were not changed.");
-    setSelectedGroup(""); setConsent(false);
+  async function addGroups() {
+    if (!connectionId || !selectedGroups.length || !consent) return;
+    const ok = await action(() => portalRequest("/alerts/groups/bulk", {
+      connectionId, groupIds: selectedGroups, consentConfirmed: true
+    }), "Monitoring activated for selected groups. Translation settings are unchanged.");
+    if (ok) { setSelectedGroups([]); setConsent(false); }
+  }
+  function editSearch(rule: Rule) {
+    setEditingRule(rule.id); setRuleName(rule.name);
+    setParameters(Array.isArray(rule.parameters) && rule.parameters.length
+      ? rule.parameters.map(row => ({ label: row.label, value: row.value }))
+      : [{ label: "What to find", value: rule.keywords }]);
+    setError("");
+  }
+  function resetSearch() {
+    setEditingRule(null); setRuleName(""); setParameters([blankParameter()]);
+  }
+  function updateParameter(index: number, field: keyof SearchParameter, value: string) {
+    setParameters(current => current.map((row,i) => i===index ? { ...row, [field]: value } : row));
   }
   async function createRule(event: React.FormEvent) {
     event.preventDefault();
-    const params = { ...form, origin: form.origin.trim()||null, destination: form.destination.trim()||null,
-      minPrice: form.minPrice ? Number(form.minPrice) : null,
-      maxPrice: form.maxPrice ? Number(form.maxPrice) : null };
-    await action(() => portalRequest("/alerts/rules", params), "Matching rule saved.");
-    setForm(emptyRule);
+    const cleaned = parameters.map(row => ({ label: row.label.trim(), value: row.value.trim() }));
+    if (!ruleName.trim() || cleaned.some(row => !row.label || !row.value)) {
+      setError("Enter a search name and complete every label and value."); return;
+    }
+    if (new Set(cleaned.map(row => row.label.toLowerCase())).size !== cleaned.length) {
+      setError("Each label must have a different name."); return;
+    }
+    const endpoint = editingRule ? "/alerts/rules/" + encodeURIComponent(editingRule) : "/alerts/rules";
+    const ok = await action(() => portalRequest(endpoint,
+      { name: ruleName.trim(), parameters: cleaned }, editingRule ? "PATCH" : "POST"),
+      "Intelligent search saved.");
+    if (ok) resetSearch();
   }
   const licensed = features?.alerts.active && features.alerts.enabled;
   return <div className="smart-alerts">
