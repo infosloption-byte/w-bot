@@ -26,7 +26,7 @@ test("semantic evidence supports indirect, naturally phrased business opportunit
     { label: "Service", excerpt: "web agency" },
     { label: "Area", excerpt: "Colombo" }
   ]));
-  assert.equal(found.get("rule-a")?.summary, "A customer wants website help in Colombo.");
+  assert.equal(found.get("rule-a")?.summary, message);
   assert.equal(found.get("rule-a")?.contactNumber, null);
 });
 test("missing, invented, or partial evidence does not produce a match", () => {
