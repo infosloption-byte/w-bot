@@ -5,7 +5,7 @@ import { planActive } from "./quotas.js";
 
 export function formatAlertNotification(input: {
   ruleName: string; groupName: string; summary: string;
-  contactNumber: string | null; createdAt: Date
+  contactNumber: string | null; senderPhone?: string | null; createdAt: Date
 }): string {
   const clean = (value: string, max: number) => value
     .replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g," ").trim().slice(0,max);
@@ -14,11 +14,14 @@ export function formatAlertNotification(input: {
   const text = clean(input.summary, 500);
   const contact = input.contactNumber && /^[+0-9 ()-]{7,32}$/.test(input.contactNumber)
     ? clean(input.contactNumber, 32) : null;
+  const sender = input.senderPhone && /^\+[1-9][0-9]{7,14}$/.test(input.senderPhone)
+    ? input.senderPhone : null;
   return [
     "🔔 W-Bot Smart Alert",
     "Search: " + name,
     "From: " + group,
     "Matched: " + input.createdAt.toISOString(),
+    "Message sender (WhatsApp): " + (sender ?? "Number unavailable"),
     "",
     text,
     ...(contact ? ["", "Contact shared in the source: " + contact] : []),
@@ -51,7 +54,7 @@ export async function processAlertDeliveries(
       match: { select: {
         summary: true, contactNumber: true, createdAt: true,
         rule: { select: { name: true } },
-        event: { select: { group: { select: { name: true } } } }
+        event: { select: { senderPhone: true, group: { select: { name: true } } } }
       }}
     }
   });
@@ -93,6 +96,7 @@ export async function processAlertDeliveries(
           groupName: delivery.match.event.group.name,
           summary: delivery.match.summary,
           contactNumber: delivery.match.contactNumber,
+          senderPhone: delivery.match.event.senderPhone,
           createdAt: delivery.match.createdAt
         });
         // An HTTP/network timeout is ambiguous; never auto-retry this send.
