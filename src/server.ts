@@ -165,7 +165,9 @@ app.post("/internal/web/message", async (request, reply) => {
 });
 
 const byonIngress = webIngress.extend({
-  connectionId: z.string().regex(/^c[a-z0-9]{18,35}$/)
+  connectionId: z.string().regex(/^c[a-z0-9]{18,35}$/),
+  // Only authenticated gateway metadata; privacy LIDs are not telephone numbers.
+  senderPhone: z.string().regex(/^\+[1-9][0-9]{7,14}$/).optional()
 });
 app.post("/internal/byon/message", async (request, reply) => {
   if (!byonAuthorized(request.headers.authorization, cfg))
@@ -177,7 +179,7 @@ app.post("/internal/byon/message", async (request, reply) => {
     enqueue(m.groupId, m.messageId, m.senderId, m.text, "WEB", connectionKey(m.connectionId)),
     ingestWatchedMessage(prisma, cfg, {
       connectionId: m.connectionId, groupId: m.groupId,
-      messageId: m.messageId, text: m.text
+      messageId: m.messageId, text: m.text, senderPhone: m.senderPhone ?? null
     })
   ]);
   if (translation.status === "rejected") app.log.error("Translation ingest failed");
