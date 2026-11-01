@@ -75,11 +75,11 @@ export async function processAlertDeliveries(
         }),
         prisma.whatsAppConnectionPolicy.findUnique({ where: { id: "global" } }),
         prisma.watchGroup.findFirst({ where: {
-          tenantId: delivery.tenantId, connectionId: delivery.connectionId,
+          tenantId: delivery.tenantId,
           whatsappGroupId: delivery.groupId
         } }),
         prisma.group.findFirst({ where: {
-          tenantId: delivery.tenantId, connectionId: delivery.connectionId,
+          tenantId: delivery.tenantId,
           whatsappGroupId: delivery.groupId, enabled: true
         } })
       ]);
