@@ -30,7 +30,7 @@ test("published USD subscriptions have ten paid months per annual term", () => {
 
 test("published tier assignment cannot override its canonical limits", async () => {
   const token = "x".repeat(43);
-  let captured: Record<string, unknown> | null = null;
+  const saved = { value: null as Record<string, unknown> | null };
   const prisma = {
     platformSession: { findUnique: async () => ({
       expiresAt: new Date(Date.now() + 100000),
@@ -41,7 +41,7 @@ test("published tier assignment cannot override its canonical limits", async () 
       tenantSubscription: { upsert: async (args: {
         create: Record<string, unknown>; update: Record<string, unknown>
       }) => {
-        captured = args.create;
+        saved.value = args.create;
         assert.equal(args.create.groupLimit, args.update.groupLimit);
         return args.create;
       } },
@@ -60,9 +60,9 @@ test("published tier assignment cannot override its canonical limits", async () 
     }
   });
   assert.equal(response.statusCode, 200, response.body);
-  assert.equal(captured?.["groupLimit"], 30);
-  assert.equal(captured?.["monthlyMessages"], 0);
-  assert.equal(captured?.["whatsappConnectionLimit"], 2);
+  assert.equal(saved.value?.["groupLimit"], 30);
+  assert.equal(saved.value?.["monthlyMessages"], 0);
+  assert.equal(saved.value?.["whatsappConnectionLimit"], 2);
   await app.close();
 });
 
