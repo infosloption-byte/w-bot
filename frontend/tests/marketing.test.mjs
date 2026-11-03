@@ -7,7 +7,7 @@ const read = file => readFileSync(fileURLToPath(new URL("../" + file, import.met
 const pages = [
   ["index", "/"], ["translation", "/translation/"], ["smart-alerts", "/smart-alerts/"],
   ["pricing", "/pricing/"], ["how-it-works", "/how-it-works/"],
-  ["faq", "/faq/"], ["contact", "/contact/"]
+  ["faq", "/faq/"], ["contact", "/contact/"], ["trust", "/trust/"]
 ];
 const nginx = read("nginx.conf");
 const vite = read("vite.config.ts");
@@ -18,7 +18,7 @@ const home = read("src/marketing-home.tsx");
 const info = read("src/marketing-info.tsx");
 const css = read("src/marketing.css");
 
-test("seven public marketing routes have unique SEO meta, canonical URL and a real JS entry", () => {
+test("eight public marketing routes have unique SEO meta, canonical URL and a real JS entry", () => {
   const titles = new Set();
   for (const [filename, url] of pages) {
     const html = read("marketing/" + filename + ".html");
@@ -66,12 +66,14 @@ test("public site has functional navigation, real customer login and honest pilo
   for (const label of ["Translation","Smart Alerts","How it works","Pricing","FAQ"]) assert.ok(shared.includes(label), label);
   assert.ok(shared.includes('href="/portal/"'));
   assert.ok(shared.includes('href="/contact/"'));
-  assert.ok(home.includes("Every message understood."));
+  assert.ok(home.includes("More clarity from every"));
   assert.ok(info.includes('href="https://sloptions.xyz/contact"'));
   assert.ok(info.includes("online checkout is not available yet"));
   assert.ok(info.includes("Smart Alerts is a separate subscription."));
   assert.ok(info.includes('fetch("/portal/api/plans"'));
   assert.ok(info.includes("Unofficial") || info.includes("unofficial"));
+  assert.ok(shared.includes("Trust & transparency"));
+  assert.ok(site.includes('currentPage === "trust"'));
 });
 test("marketing responsive behavior includes mobile nav and reduced-motion fallback", () => {
   assert.ok(shared.includes('aria-expanded={open}'));
@@ -80,4 +82,26 @@ test("marketing responsive behavior includes mobile nav and reduced-motion fallb
   assert.ok(css.includes("@media(max-width:480px)"));
   assert.ok(css.includes("prefers-reduced-motion"));
   assert.ok(css.includes(".site-skip-link"));
+});
+
+test("professional design exposes grounded trust controls instead of unsupported certifications",()=>{
+  const trust = read("src/marketing-trust.tsx");
+  for(const phrase of ["Customer-owned WhatsApp connections", "Explicit group selection",
+    "Independent service permissions", "External AI services", "Important service limitations"])
+    assert.ok(trust.includes(phrase), phrase);
+  for(const phrase of ["site-trust-section", "site-trust-grid", "site-trust-disclosure"])
+    assert.ok(home.includes(phrase), phrase);
+  assert.ok(css.includes("--deep:#153044"));
+  assert.ok(css.includes("background:#fff"));
+  assert.ok(!css.includes("filter:blur(60px)"));
+  assert.ok(!css.includes("transform:rotate(-1deg)"));
+});
+
+test("marketing theme does not change authenticated customer and platform layouts",()=>{
+  const customer=read("src/main.tsx");
+  const platform=read("src/platform-main.tsx");
+  assert.ok(!customer.includes('import "./marketing.css"'));
+  assert.ok(!platform.includes('import "./marketing.css"'));
+  assert.ok(nginx.includes("location /portal/api/"));
+  assert.ok(nginx.includes("location /portal/platform/"));
 });
