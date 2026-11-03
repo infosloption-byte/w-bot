@@ -218,7 +218,7 @@ function App() {
             <div className="preview-msg is-match"><b>Smart Alert match</b>Web design · Colombo · budget of at least 20,000 LKR</div>
           </div>
         </div>
-        <div className="auth-disclaimer">Invitation-only pilot · Unofficial WhatsApp Web connector · Group administrator consent required</div>
+        <div className="auth-disclaimer">Invitation-only pilot · Unofficial WhatsApp Web connector · Group administrator consent required · <a href="/">Explore the W-Bot website</a></div>
       </section>
       <section className="auth-panel">
         <div className="auth-box">
