@@ -114,6 +114,6 @@ export function PrivacyPanel() {
     <span className="site-feature-icon"><Icon name="shield" size={24}/></span>
     <div><Eyebrow>GROUP CONTROL MATTERS</Eyebrow><h2>Opt-in by design.</h2>
       <p>W-Bot does not automatically join groups or read private direct chats for Smart Alerts. Users connect an account they control, select authorized groups and confirm appropriate participant notice. Third-party AI processing and WhatsApp linked-device limitations should be reviewed before onboarding sensitive groups.</p>
-      <a className="site-link-arrow" href="/faq/">Read frequently asked questions <Icon name="arrow" size={18}/></a></div>
+      <a className="site-link-arrow" href="/trust/">Trust and data handling <Icon name="arrow" size={18}/></a></div>
   </div>;
 }
