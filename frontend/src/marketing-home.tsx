@@ -20,11 +20,6 @@ export function Home() {
         <Preview/>
       </div>
     </section>
-    <div className="site-value-strip"><div className="site-container site-value-inner">
-      <div><Icon name="shield" size={19}/><span>Group authorization controls</span></div>
-      <div><Icon name="phone" size={19}/><span>Customer-owned connections</span></div>
-      <div><Icon name="activity" size={19}/><span>Separate service permissions</span></div>
-    </div></div>
     <section className="site-section site-container">
       <SectionHeading tag="OUR PLATFORM" title="Two useful services. One clear workspace."
         description="Translate group messages and discover relevant updates. Activate either service independently, with separate group permissions and usage controls."/>
