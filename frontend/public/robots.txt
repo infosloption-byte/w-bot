@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /portal/assets/
+Disallow: /portal/
+Disallow: /portal/api/
+Sitemap: https://wbot.sloptions.xyz/sitemap.xml
