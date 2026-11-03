@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { currentPage, Header, Footer } from "./marketing-shared.js";
 import { Home, Translation, Alerts } from "./marketing-home.js";
 import { Pricing, HowItWorks, FAQ, Contact } from "./marketing-info.js";
+import { Trust } from "./marketing-trust.js";
 import "./marketing.css";
 
 function MarketingApp() {
@@ -17,6 +18,7 @@ function MarketingApp() {
       {currentPage === "how" && <HowItWorks/>}
       {currentPage === "faq" && <FAQ/>}
       {currentPage === "contact" && <Contact/>}
+      {currentPage === "trust" && <Trust/>}
     </main>
     <Footer/>
   </div>;
