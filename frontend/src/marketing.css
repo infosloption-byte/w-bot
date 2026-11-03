@@ -402,3 +402,18 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #43
  .site-action,.site-link-arrow svg,.site-faq-list summary span{transition:none!important}
  .site-action:hover{transform:none}
 }
+
+/* Trust center */
+.site-trust-detail{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1fr);gap:65px;align-items:start}
+.site-trust-detail .site-section-heading{margin:0}
+.site-trust-detail-list{display:grid;gap:13px}
+.site-trust-detail-list>div{display:flex;gap:16px;border:1px solid #dae6e9;background:#fff;padding:21px;border-radius:11px}
+.site-trust-detail-list>div>svg{color:#28836e;flex:none;margin-top:1px}
+.site-trust-detail-list h3{font-size:15px;letter-spacing:-.015em;margin:0 0 6px}
+.site-trust-detail-list p{font-size:12px;margin:0;line-height:1.72}
+.site-trust-important{display:flex;align-items:flex-start;gap:23px;border:1px solid #d9e5e9;border-radius:13px;background:#fbfcfd;padding:33px}
+.site-trust-important>span{flex:none;display:grid;place-items:center;width:47px;height:47px;border-radius:11px;background:#e8f4f0;color:#217667}
+.site-trust-important h2{font-size:clamp(25px,2.5vw,35px);margin:0 0 13px}
+.site-trust-important p{font-size:14px;max-width:900px}
+@media(max-width:900px){.site-trust-detail{grid-template-columns:1fr;gap:30px}}
+@media(max-width:480px){.site-trust-important{display:block;padding:25px}.site-trust-important>span{margin-bottom:18px}}
