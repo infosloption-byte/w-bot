@@ -73,13 +73,16 @@ configured. After certbot, **inspect the generated 80/443 Nginx blocks**
 (`sudo nginx -T`) to verify that both admin paths still require Basic Auth on
 HTTPS and that HTTP redirects to HTTPS.
 
-The customer home page is:
+The public marketing homepage is:
+- https://wbot.sloptions.xyz/
+
+The customer workspace and sign-in page is:
 - https://wbot.sloptions.xyz/portal/
 
 Platform Admin (two successive logins: Nginx Basic Auth then W-Bot):
 - https://wbot.sloptions.xyz/portal/platform/
 
-The root of the subdomain redirects to `/portal/`.
+The root of the subdomain is the **public marketing homepage** after the public-site deployment and active HTTPS vhost update. The customer login remains at `/portal/`.
 
 ## 4. Production app settings
 
@@ -114,7 +117,7 @@ enable verification if SMTP is not configured.
     curl -I https://wbot.sloptions.xyz/portal/platform/
     curl -I https://wbot.sloptions.xyz/portal/api/platform/me
 
-Expected: root redirect, customer page HTTP 200, and both unauthenticated
+Expected after marketing deployment: root HTTP 200 (not a login redirect), customer page HTTP 200, and both unauthenticated
 platform paths HTTP **401** from external Nginx Basic Auth.
 `https://wbot.sloptions.xyz/portal/api/me` should still return an app-level
 HTTP 401 when no customer is logged in.
@@ -122,6 +125,10 @@ HTTP 401 when no customer is logged in.
 After logging in through HTTPS, verify customer sign-in, group listing,
 language changes and existing WhatsApp translations without editing any
 Docker auth volumes.
+
+## Marketing root-route migration
+
+The original example vhost had `location = / { return 302 /portal/; }`. The marketing-enabled sample no longer includes that redirect. The **active live HTTPS Nginx config may still have it**. Inspect `sudo nginx -T`, back up the live vhost, remove only this root redirect, retain all Basic Auth protections, then `sudo nginx -t && sudo systemctl reload nginx`. Do not overwrite Certbot-managed TLS blocks with a plain HTTP sample. See [public marketing site guide](PUBLIC_MARKETING_SITE.md).
 
 ## Security caveats
 

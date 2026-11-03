@@ -1,6 +1,8 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json tsconfig.json vite.config.ts index.html platform.html ./
+COPY marketing ./marketing
+COPY public ./public
 RUN npm install --no-audit --no-fund
 COPY src ./src
 COPY tests ./tests
