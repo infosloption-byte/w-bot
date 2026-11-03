@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Icon } from "./Icon.js";
 import { Action, Cta, Eyebrow, PageHero, SectionHeading } from "./marketing-shared.js";
 import { PrivacyPanel, Steps } from "./marketing-demos.js";
@@ -8,8 +8,39 @@ const plans = [
   {name:"Team",price:179,annual:1790,accounts:2,groups:30,label:"For growing teams",highlight:true},
   {name:"Business",price:329,annual:3290,accounts:5,groups:50,label:"For larger workspaces",highlight:false}
 ];
+type TranslationPlan = (typeof plans)[number];
 export function Pricing() {
   const [billing, setBilling] = useState<"month" | "year">("month");
+  const [catalog, setCatalog] = useState<TranslationPlan[]>(plans);
+  // Public endpoint is the authoritative source for commercial plans.
+  // Static catalog is a fallback while the API is temporarily unavailable.
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/portal/api/plans", { signal: controller.signal, credentials: "same-origin" })
+      .then(response => { if (!response.ok) throw new Error("Catalog unavailable"); return response.json(); })
+      .then((result: { plans?: Array<{
+        code: string; name: string; monthlyCents: number; yearlyCents: number;
+        whatsappConnections: number; groups: number
+      }> }) => {
+        if (!Array.isArray(result.plans) || result.plans.length === 0) return;
+        const source = result.plans.filter(item =>
+          typeof item.name === "string" &&
+          Number.isFinite(item.monthlyCents) && item.monthlyCents > 0 &&
+          Number.isFinite(item.yearlyCents) && item.yearlyCents > 0 &&
+          Number.isInteger(item.whatsappConnections) && item.whatsappConnections > 0 &&
+          Number.isInteger(item.groups) && item.groups > 0);
+        if (source.length !== result.plans.length) return;
+        setCatalog(source.map(item => ({
+          name: item.name, price: item.monthlyCents / 100,
+          annual: item.yearlyCents / 100,
+          accounts: item.whatsappConnections, groups: item.groups,
+          label: item.code === "STARTER" ? "For smaller groups" :
+            item.code === "TEAM" ? "For growing teams" : "For larger workspaces",
+          highlight: item.code === "TEAM"
+        })));
+      }).catch(() => { /* Keep the verified static pilot catalog. */ });
+    return () => controller.abort();
+  }, []);
   return <>
     <PageHero tag="PLANS & PRICING" title={<>The right plan for <em>your groups.</em></>}
       description="Choose the Group Translation capacity that fits your workspace. Smart Alerts is subscribed to separately, with its own monitoring and AI usage limits."/>
@@ -23,7 +54,7 @@ export function Pricing() {
             onClick={()=>setBilling("year")}>Yearly <span>2 months equivalent saved</span></button>
         </div>
       </div>
-      <div className="site-pricing-grid">{plans.map(plan=><article key={plan.name}
+      <div className="site-pricing-grid">{catalog.map(plan=><article key={plan.name}
         className={"site-plan-card"+(plan.highlight?" is-highlighted":"")}>
         {plan.highlight && <div className="site-plan-featured">POPULAR CAPACITY</div>}
         <div className="site-plan-top"><span>{plan.label}</span><h3>{plan.name}</h3></div>
