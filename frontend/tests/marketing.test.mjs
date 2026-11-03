@@ -37,6 +37,7 @@ test("Vite and Docker build all marketing documents alongside existing portal en
   for (const [filename] of pages) assert.ok(vite.includes("marketing/" + filename + ".html"));
   assert.ok(docker.includes("COPY marketing ./marketing"));
   assert.ok(docker.includes("COPY public ./public"));
+  assert.ok(docker.includes("COPY nginx.conf Dockerfile ./"), "build must copy test-inspected Nginx and Dockerfile configs");
   assert.ok(docker.includes("COPY --from=build /app/dist /usr/share/nginx/html/portal"));
 });
 test("public marketing routes never replace platform admin and authenticated API protections", () => {
