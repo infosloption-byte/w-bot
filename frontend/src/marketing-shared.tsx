@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Icon } from "./Icon.js";
 
-export type Page = "home" | "translation" | "alerts" | "pricing" | "how" | "faq" | "contact";
+export type Page = "home" | "translation" | "alerts" | "pricing" | "how" | "faq" | "contact" | "trust";
 export const routes: Record<Page, string> = {
   home: "/", translation: "/translation/", alerts: "/smart-alerts/",
-  pricing: "/pricing/", how: "/how-it-works/", faq: "/faq/", contact: "/contact/"
+  pricing: "/pricing/", how: "/how-it-works/", faq: "/faq/", contact: "/contact/", trust: "/trust/"
 };
 export const currentPage: Page = (Object.entries(routes).find(([, url]) =>
   url.replace(/\/+$/, "") === (window.location.pathname.replace(/\/+$/, "") || "/")
@@ -67,7 +67,7 @@ export function Footer() {
       <div className="site-footer-links">
         <div><strong>Platform</strong><a href="/translation/">Group Translation</a><a href="/smart-alerts/">Smart Alerts</a>
           <a href="/how-it-works/">How it works</a></div>
-        <div><strong>Explore</strong><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a>
+        <div><strong>Explore</strong><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/trust/">Trust & transparency</a>
           <a href="/contact/">Contact</a></div>
         <div><strong>Account</strong><a href="/portal/">Customer portal</a>
           <a href="https://sloptions.xyz/" target="_blank" rel="noopener noreferrer">SL Options</a></div>
