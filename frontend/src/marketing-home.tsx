@@ -70,7 +70,7 @@ export function Home() {
         <div className="site-trust-disclosure">
           <Icon name="info" size={20}/>
           <p><strong>Important to know:</strong> Customer-owned connections use an unofficial WhatsApp Web integration, not an endorsed Meta service. Availability can vary, and AI-generated matches require human review.</p>
-          <a href="/faq/">Read how W-Bot works <Icon name="arrow" size={15}/></a>
+          <a href="/trust/">Our approach to privacy <Icon name="arrow" size={15}/></a>
         </div>
       </div>
     </section>
