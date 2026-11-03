@@ -44,7 +44,7 @@ export function Trust() {
       <div className="site-trust-important">
         <span><Icon name="info" size={24}/></span>
         <div><h2>Important service limitations</h2>
-          <p>Customer-owned WhatsApp sessions currently use an unofficial linked-device integration. This is not a Meta-endorsed WhatsApp business integration, and connections may disconnect or face account restrictions. Smart Alerts uses AI interpretation, so matches can be wrong or missed. W-Bot is currently an invitation-only technical pilot, not a certified or audited security service.</p>
+          <p>Customer-owned WhatsApp sessions currently use an unofficial linked-device integration. This is not a Meta-endorsed WhatsApp business integration, and connections may disconnect or face account restrictions. Smart Alerts uses AI interpretation, so matches can be wrong or missed. W-Bot is currently an invitation-only technical pilot; we do not claim an independently verified security certification.</p>
           <a className="site-link-arrow" href="/faq/">Review common questions <Icon name="arrow" size={17}/></a>
         </div>
       </div>
