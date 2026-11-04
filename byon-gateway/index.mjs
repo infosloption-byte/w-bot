@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { mkdir, rm } from "node:fs/promises";
+import { createKmsProvider, openSessionVault } from "./auth-vault.mjs";
 import { timingSafeEqual } from "node:crypto";
 import { extractByonLiveMessage } from "./message-routing.mjs";
 import { resolveSenderPhone } from "./sender-phone.mjs";
@@ -15,6 +16,12 @@ import { isGroupJid, extractLiveMessage, buildQuotedMessage, isVerifiedGroupAdmi
 process.umask(0o077);
 const token = process.env.BYON_GATEWAY_TOKEN || "";
 const authRoot = process.env.BYON_AUTH_DIR || "/data/auth";
+const vaultRoot = process.env.BYON_VAULT_DIR || "/data/vault";
+const authMode = process.env.BYON_AUTH_MODE || "legacy";
+if (authMode !== "legacy" && authMode !== "kms") throw Error("Unsupported BYON_AUTH_MODE");
+const vaultProvider = authMode === "kms"
+  ? await createKmsProvider(process.env.BYON_KMS_KEY_ID)
+  : null;
 const port = Number(process.env.PORT || 9039);
 const apiOrigin = process.env.BYON_API_ORIGIN || "http://api:9028";
 const maxSessions = Number(process.env.BYON_MAX_SESSIONS || 20);
@@ -135,7 +142,7 @@ async function activation(entry, msg, incoming, code) {
     } catch { /* reply is optional */ }
   } catch { console.warn("BYON activation metadata check failed"); }
 }
-async function connect(id, phoneNumber) {
+async function connect(id, phoneNumber, allowNew = false) {
   if (!idValid(id)) throw Error("Invalid connection ID");
   const existing = sessions.get(id);
   if (existing && !existing.stopped) {
@@ -144,6 +151,7 @@ async function connect(id, phoneNumber) {
       existing.stopped = true;
       try { existing.socket?.end?.(new Error("Expired pairing session")); } catch { /* noop */ }
       sessions.delete(id);
+      void existing.vault?.close().catch(() => {});
     } else {
       // Customers can change from QR to pairing-code mode without resetting
       // a still-valid linked-device session. Never log the phone or code.
@@ -167,11 +175,19 @@ async function connect(id, phoneNumber) {
     }
   }
   if (sessions.size >= maxSessions) throw Error("SESSION_CAPACITY_REACHED");
-  const directory = join(authRoot, id);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const { state, saveCreds } = await useMultiFileAuthState(directory);
+  // In KMS mode never access the old plaintext auth directory. Existing
+  // sessions must have been migrated; a bootstrap cannot recreate credentials.
+  const store = authMode === "kms"
+    ? await openSessionVault(vaultRoot, id, vaultProvider, { allowCreate: allowNew })
+    : await (async () => {
+      const directory = join(authRoot, id);
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      return useMultiFileAuthState(directory);
+    })();
+  const { state, saveCreds } = store;
   const entry = {
-    id, socket: null, connected: false, status: "PAIRING",
+    id, vault: "close" in store ? store : null,
+    socket: null, connected: false, status: "PAIRING",
     pairingCode: null, qrDataUrl: null, qrUntil: 0,
     phoneLast4: null, stopped: false, retry: 0, retryTimer: null,
     phoneNumber: phoneNumber || null, pairingRequested: false, recentOutboundIds: new Set()
@@ -185,7 +201,11 @@ async function connect(id, phoneNumber) {
       syncFullHistory: false, markOnlineOnConnect: false
     });
     entry.socket = ws;
-    ws.ev.on("creds.update", saveCreds);
+    ws.ev.on("creds.update", () => {
+      void Promise.resolve(saveCreds()).catch(() => {
+        console.error("BYON auth persistence failed; session requires operator attention");
+      });
+    });
     ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
       if (entry.socket !== ws || entry.stopped) return;
       if (qr && !ws.authState.creds.registered) {
@@ -221,6 +241,7 @@ async function connect(id, phoneNumber) {
           entry.stopped = true;
           void report(id, entry.status);
           sessions.delete(id);
+          void entry.vault?.close().catch(() => {});
           console.warn("BYON linked session requires repair");
           return;
         }
@@ -232,7 +253,8 @@ async function connect(id, phoneNumber) {
           // Reopen with fresh on-disk credentials after any reconnect.
           entry.stopped = true;
           sessions.delete(id);
-          void connect(id).catch(() => console.warn("BYON reconnect failed"));
+          void entry.vault?.close().then(() => connect(id)).catch(() => console.warn("BYON reconnect failed"));
+          if (!entry.vault) void connect(id).catch(() => console.warn("BYON reconnect failed"));
         }, Math.min(60000, 1500 * 2 ** Math.min(entry.retry, 5)));
       }
     });
@@ -293,9 +315,11 @@ async function revoke(id) {
     sessions.delete(id);
     try { await entry.socket?.logout(); } catch { /* unlink may be offline */ }
     try { entry.socket?.end?.(new Error("Connection revoked")); } catch { /* noop */ }
+    await entry.vault?.close();
   }
-  // Delete ONLY this customer's dedicated auth dir, never shared W-Bot credentials.
-  await rm(join(authRoot, id), { recursive: true, force: true });
+  // Delete ONLY this customer's dedicated auth dir; the legacy volume is
+  // not mounted into a KMS-enabled gateway and must never be touched here.
+  await rm(join(authMode === "kms" ? vaultRoot : authRoot, id), { recursive: true, force: true });
 }
 const server = createServer(async (req, res) => {
   if (!auth(req)) return respond(res,401,{error:"Unauthorized"});
@@ -308,7 +332,7 @@ const server = createServer(async (req, res) => {
       const input = await body(req);
       if (input.phoneNumber && !phoneValid(input.phoneNumber))
         return respond(res,400,{error:"Invalid pairing number"});
-      await connect(id, input.phoneNumber);
+      await connect(id, input.phoneNumber, true);
       return respond(res,202,{started:true});
     }
     if (req.method === "POST" && action === "revoke") {
@@ -396,6 +420,7 @@ async function synchronize() {
     clearTimeout(entry.retryTimer);
     sessions.delete(id);
     try { entry.socket?.end?.(new Error("Session paused by policy")); } catch { /* noop */ }
+    void entry.vault?.close().catch(() => {});
     void report(id, "DISCONNECTED");
   }
   for (const id of allowed) {
