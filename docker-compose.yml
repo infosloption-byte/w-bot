@@ -52,6 +52,9 @@ services:
     environment:
       BYON_GATEWAY_TOKEN: ${BYON_GATEWAY_TOKEN:-}
       BYON_AUTH_DIR: /data/auth
+      # After vault cutover, persist kms mode in .env so a missing override
+      # fails closed rather than silently re-opening plaintext storage.
+      BYON_AUTH_MODE: ${BYON_AUTH_MODE:-legacy}
       BYON_API_ORIGIN: http://api:9028
       BYON_MAX_SESSIONS: ${BYON_MAX_SESSIONS:-20}
       PORT: "9039"
