@@ -15,6 +15,7 @@ export default defineConfig({
         marketingPricing: "marketing/pricing.html",
         marketingHow: "marketing/how-it-works.html",
         marketingFAQ: "marketing/faq.html",
+        marketingTrust: "marketing/trust.html",
         marketingContact: "marketing/contact.html"
       }
     }

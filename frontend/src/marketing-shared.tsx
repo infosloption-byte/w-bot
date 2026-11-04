@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { Icon } from "./Icon.js";
 
-export type Page = "home" | "translation" | "alerts" | "pricing" | "how" | "faq" | "contact";
+export type Page = "home" | "translation" | "alerts" | "pricing" | "how" | "faq" | "contact" | "trust";
 export const routes: Record<Page, string> = {
   home: "/", translation: "/translation/", alerts: "/smart-alerts/",
-  pricing: "/pricing/", how: "/how-it-works/", faq: "/faq/", contact: "/contact/"
+  pricing: "/pricing/", how: "/how-it-works/", faq: "/faq/", contact: "/contact/", trust: "/trust/"
 };
 export const currentPage: Page = (Object.entries(routes).find(([, url]) =>
   url.replace(/\/+$/, "") === (window.location.pathname.replace(/\/+$/, "") || "/")
@@ -47,8 +47,8 @@ export function Header({ page }: { page: Page }) {
         </div>
       </nav>
       <div className="site-header-actions">
-        <a className="site-signin" href="/portal/">Log in</a>
-        <a className="site-header-cta" href="/contact/">Request access <Icon name="arrow" size={15}/></a>
+        <a className="site-signin" href="/portal/">Customer login</a>
+        <a className="site-header-cta" href="/contact/">Talk to our team <Icon name="arrow" size={15}/></a>
       </div>
       <button type="button" className="site-menu-toggle" aria-label={open ? "Close navigation" : "Open navigation"}
         aria-expanded={open} aria-controls="site-primary-nav" onClick={() => setOpen(value => !value)}>
@@ -61,13 +61,13 @@ export function Footer() {
   return <footer className="site-footer"><div className="site-container">
     <div className="site-footer-top">
       <div className="site-footer-brand"><Brand/>
-        <p>A clearer way to work with multilingual WhatsApp groups and the opportunities they share.</p>
-        <span className="site-footer-status"><span/> Invite-only pilot</span>
+        <p>Practical group translation and relevant message alerts, with clear control over the groups you authorize.</p>
+        <span className="site-footer-status"><Icon name="info" size={14}/> Invite-only technical pilot</span>
       </div>
       <div className="site-footer-links">
         <div><strong>Platform</strong><a href="/translation/">Group Translation</a><a href="/smart-alerts/">Smart Alerts</a>
           <a href="/how-it-works/">How it works</a></div>
-        <div><strong>Explore</strong><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a>
+        <div><strong>Explore</strong><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/trust/">Trust & transparency</a>
           <a href="/contact/">Contact</a></div>
         <div><strong>Account</strong><a href="/portal/">Customer portal</a>
           <a href="https://sloptions.xyz/" target="_blank" rel="noopener noreferrer">SL Options</a></div>
@@ -75,7 +75,7 @@ export function Footer() {
     </div>
     <div className="site-footer-bottom">
       <span>© {new Date().getFullYear()} SL Options. W-Bot is a product of SL Options.</span>
-      <span>Customer-owned WhatsApp connections use an unofficial linked-device gateway and may be restricted by WhatsApp. Not affiliated with Meta.</span>
+      <span>Transparency note: linked-device access uses an unofficial WhatsApp Web gateway. W-Bot is not affiliated with or endorsed by Meta or WhatsApp.</span>
     </div>
   </div></footer>;
 }
@@ -86,7 +86,7 @@ export function SectionHeading({ tag, title, description, center = false }: {
     <Eyebrow>{tag}</Eyebrow><h2>{title}</h2>{description && <p>{description}</p>}
   </div>;
 }
-export function Cta({ title = "Ready to make your groups more useful?", description = "Explore W-Bot with an invite-only pilot. Translation and Smart Alerts can be activated independently." }: {
+export function Cta({ title = "A clearer way to work with your groups.", description = "Discuss your use case with our team. Access is invitation-based and each service is configured separately." }: {
   title?: string; description?: string;
 }) {
   return <section className="site-container site-cta-wrap"><div className="site-cta">

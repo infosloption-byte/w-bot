@@ -10,26 +10,21 @@ export function Home() {
       <div className="site-hero-orb is-one" aria-hidden="true"/><div className="site-hero-orb is-two" aria-hidden="true"/>
       <div className="site-container site-hero-layout">
         <div className="site-hero-copy">
-          <Eyebrow>THE WHATSAPP GROUP INTELLIGENCE WORKSPACE</Eyebrow>
-          <h1>Every message understood. <em>Every opportunity noticed.</em></h1>
-          <p>Translate multilingual group conversations and discover relevant opportunities with AI-powered alerts, all from one connected workspace.</p>
+          <Eyebrow>WHATSAPP GROUP WORKSPACE BY SL OPTIONS</Eyebrow>
+          <h1>More clarity from every <em>group conversation.</em></h1>
+          <p>Translate discussions across languages, monitor messages that matter, and manage your approved groups in one thoughtfully designed workspace.</p>
           <div className="site-hero-actions"><Action href="/contact/">Request pilot access</Action>
-            <Action href="/how-it-works/" secondary>See how W-Bot works</Action></div>
-          <div className="site-hero-points"><span><Icon name="check" size={16}/> One account</span>
-            <span><Icon name="check" size={16}/> Two independent services</span>
-            <span><Icon name="check" size={16}/> You choose the groups</span></div>
+            <Action href="/how-it-works/" secondary>Explore the platform</Action></div>
+          <div className="site-hero-points"><span><Icon name="shield" size={16}/> Authorized groups only</span>
+            <span><Icon name="lock" size={16}/> Private alerts inbox</span>
+            <span><Icon name="settings" size={16}/> Your service controls</span></div>
         </div>
         <HeroScene/>
       </div>
     </section>
-    <div className="site-value-strip"><div className="site-container site-value-inner">
-      <div><Icon name="shield" size={19}/><span>Explicit group authorization</span></div>
-      <div><Icon name="phone" size={19}/><span>Shared customer-owned connections</span></div>
-      <div><Icon name="activity" size={19}/><span>Independent subscriptions and usage</span></div>
-    </div></div>
     <section className="site-section site-container">
-      <SectionHeading tag="TWO TOOLS. ONE WORKSPACE." title="Do more with the conversations you're already part of."
-        description="Each feature solves a different problem. Use the one you need, or combine both."/>
+      <SectionHeading tag="OUR PLATFORM" title="Two useful services. One clear workspace."
+        description="Translate group messages and discover relevant updates. Activate either service independently, with separate group permissions and usage controls."/>
       <ProductCards/>
     </section>
     <section className="site-section site-container">
@@ -38,8 +33,8 @@ export function Home() {
       <Overview/>
     </section>
     <section className="site-section site-section-muted"><div className="site-container">
-      <SectionHeading tag="SIMPLE TO GET STARTED" title="From connected to configured in four clear steps."
-        description="No automatic group joining, no bulk outreach, and no need to change how people already chat."/>
+      <SectionHeading tag="GETTING STARTED" title="A straightforward way to get started."
+        description="Connect an account you control, approve the groups you need, and configure each feature deliberately."/>
       <Steps/><div className="site-section-foot"><a className="site-link-arrow" href="/how-it-works/">
         View the full process <Icon name="arrow" size={18}/></a></div>
     </div></section>
@@ -51,6 +46,35 @@ export function Home() {
       </div>
       <UseCaseExample/>
     </div></section>
+    <section className="site-section site-trust-section">
+      <div className="site-container">
+        <div className="site-trust-intro">
+          <div><SectionHeading tag="TRUST & TRANSPARENCY" title="Know what is connected. Control what is monitored."
+            description="Working with group conversations requires clear boundaries. W-Bot makes group selection and service access explicit instead of silently monitoring every chat."/></div>
+          <div className="site-trust-intro-note"><Icon name="shield" size={21}/>
+            <p>Built with practical access controls and honest information about how the current pilot works—not unverified security badges or guarantees.</p></div>
+        </div>
+        <div className="site-trust-grid">
+          <article><span><Icon name="phone" size={23}/></span>
+            <h3>Accounts you authorize</h3>
+            <p>Connect a WhatsApp account you control. W-Bot operates only with selected group access, subject to authorization and participant notice.</p>
+          </article>
+          <article><span><Icon name="settings" size={23}/></span>
+            <h3>Services under your control</h3>
+            <p>Translation and Smart Alerts have separate settings, subscriptions and group permissions. Enabling one does not automatically enable the other.</p>
+          </article>
+          <article><span><Icon name="inbox" size={23}/></span>
+            <h3>Alert delivery by choice</h3>
+            <p>Matches are reviewed in your workspace inbox. You can optionally select a dedicated, consented WhatsApp group for notifications.</p>
+          </article>
+        </div>
+        <div className="site-trust-disclosure">
+          <Icon name="info" size={20}/>
+          <p><strong>Important to know:</strong> Customer-owned connections use an unofficial WhatsApp Web integration, not an endorsed Meta service. Availability can vary, and AI-generated matches require human review.</p>
+          <a href="/trust/">Our approach to privacy <Icon name="arrow" size={15}/></a>
+        </div>
+      </div>
+    </section>
     <Cta/>
   </>;
 }
