@@ -5,7 +5,7 @@ import pino from "pino";
 import QRCode from "qrcode";
 import { createServer } from "node:http";
 import { join } from "node:path";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readFile } from "node:fs/promises";
 import { createKmsProvider, openSessionVault } from "./auth-vault.mjs";
 import { timingSafeEqual } from "node:crypto";
 import { extractByonLiveMessage } from "./message-routing.mjs";
@@ -19,6 +19,14 @@ const authRoot = process.env.BYON_AUTH_DIR || "/data/auth";
 const vaultRoot = process.env.BYON_VAULT_DIR || "/data/vault";
 const authMode = process.env.BYON_AUTH_MODE || "legacy";
 if (authMode !== "legacy" && authMode !== "kms") throw Error("Unsupported BYON_AUTH_MODE");
+// Never start encrypted mode with a non-persistent directory, nor while the
+// plaintext legacy volume is accidentally still mounted into this container.
+if (authMode === "kms") {
+  const lines = (await readFile("/proc/self/mountinfo", "utf8")).split("\n");
+  const mounts = new Set(lines.map(line => line.split(" - ")[0].split(" ")[4]));
+  if (!mounts.has(vaultRoot) || mounts.has(authRoot))
+    throw Error("Encrypted vault volume missing or legacy auth volume still mounted");
+}
 const vaultProvider = authMode === "kms"
   ? await createKmsProvider(process.env.BYON_KMS_KEY_ID)
   : null;
@@ -203,7 +211,17 @@ async function connect(id, phoneNumber, allowNew = false) {
     entry.socket = ws;
     ws.ev.on("creds.update", () => {
       void Promise.resolve(saveCreds()).catch(() => {
-        console.error("BYON auth persistence failed; session requires operator attention");
+        // A session whose credentials cannot be durably saved must not
+        // continue processing group messages with stale Signal state.
+        entry.stopped = true;
+        entry.connected = false;
+        entry.status = "DISCONNECTED";
+        clearTimeout(entry.retryTimer);
+        sessions.delete(id);
+        try { ws.end(new Error("Auth storage unavailable")); } catch { /* noop */ }
+        void entry.vault?.close().catch(() => {});
+        void report(id, "DISCONNECTED");
+        console.error("BYON auth persistence unavailable; session stopped");
       });
     });
     ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
