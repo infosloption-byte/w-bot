@@ -150,7 +150,19 @@ async function activation(entry, msg, incoming, code) {
     } catch { /* reply is optional */ }
   } catch { console.warn("BYON activation metadata check failed"); }
 }
+// Serialize connection initialization per ID. A pair request and policy sync
+// must never initialize two Baileys sockets or two KMS keys simultaneously.
+const pendingConnections = new Map();
 async function connect(id, phoneNumber, allowNew = false) {
+  if (!idValid(id)) throw Error("Invalid connection ID");
+  const pending = pendingConnections.get(id);
+  if (pending) return pending;
+  const started = connectSession(id, phoneNumber, allowNew);
+  pendingConnections.set(id, started);
+  try { return await started; }
+  finally { if (pendingConnections.get(id) === started) pendingConnections.delete(id); }
+}
+async function connectSession(id, phoneNumber, allowNew = false) {
   if (!idValid(id)) throw Error("Invalid connection ID");
   const existing = sessions.get(id);
   if (existing && !existing.stopped) {
@@ -321,7 +333,13 @@ async function connect(id, phoneNumber, allowNew = false) {
       }
     });
   }
-  attach();
+  try { attach(); }
+  catch (error) {
+    entry.stopped = true;
+    sessions.delete(id);
+    await entry.vault?.close().catch(() => {});
+    throw error;
+  }
   void report(id, "PAIRING");
   return entry;
 }
