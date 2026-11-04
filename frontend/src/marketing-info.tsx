@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Icon } from "./Icon.js";
 import { Action, Cta, Eyebrow, PageHero, SectionHeading } from "./marketing-shared.js";
 import { PrivacyPanel, Steps } from "./marketing-demos.js";
+import { Flow, IconCluster, Meter, Overview, TopicCards } from "./marketing-graphics.js";
 
 const plans = [
   {name:"Starter",price:69,annual:690,accounts:1,groups:10,label:"For smaller groups",highlight:false},
@@ -43,7 +44,10 @@ export function Pricing() {
   }, []);
   return <>
     <PageHero tag="PLANS & PRICING" title={<>The right plan for <em>your groups.</em></>}
-      description="Choose the Group Translation capacity that fits your workspace. Smart Alerts is subscribed to separately, with its own monitoring and AI usage limits."/>
+      description="Choose the Group Translation capacity that fits your workspace. Smart Alerts is subscribed to separately, with its own monitoring and AI usage limits.">
+      <IconCluster center="plans" label="Illustration: Translation plans and Smart Alerts licensing"
+        items={[["translate","Translation plans"],["sparkles","Smart Alerts"],["groups","Group capacity"]]}/>
+    </PageHero>
     <section className="site-section site-container site-pricing-section">
       <div className="site-pricing-heading"><div><Eyebrow>GROUP TRANSLATION</Eyebrow><h2>Simple, transparent group limits.</h2>
         <p>Published Translation catalog. Plan activation is handled during the pilot; online checkout is not available yet.</p></div>
@@ -61,6 +65,8 @@ export function Pricing() {
         <div className="site-price"><span>$</span><strong>{billing==="month"?plan.price:Math.round(plan.annual/12)}</strong><small>/ month</small></div>
         <p className="site-billing-note">{billing==="year" ? "$"+plan.annual.toLocaleString("en-US")+" billed annually" : "Billed monthly, USD"}</p>
         <div className="site-plan-divider"/>
+        <Meter label="WhatsApp accounts" value={plan.accounts} max={5} unit={plan.accounts===1?"account":"accounts"}/>
+        <Meter label="Translation groups" value={plan.groups} max={50} unit="groups"/>
         <ul>
           <li><Icon name="check" size={17}/>{plan.accounts} linked WhatsApp account{plan.accounts===1?"":"s"}</li>
           <li><Icon name="check" size={17}/>{plan.groups} Translation group slots</li>
@@ -85,13 +91,21 @@ export function Pricing() {
 export function HowItWorks() {
   return <>
     <PageHero tag="HOW IT WORKS" title={<>One connected workspace. <em>Two clear workflows.</em></>}
-      description="Connect an authorized WhatsApp account, activate only the services you need, then decide which groups each feature can use."/>
+      description="Connect an authorized WhatsApp account, activate only the services you need, then decide which groups each feature can use.">
+      <IconCluster center="settings" label="Illustration: connect, choose services, select groups"
+        items={[["phone","Connect WhatsApp"],["zap","Choose services"],["groups","Select groups"]]}/>
+    </PageHero>
     <section className="site-section site-container">
+      <SectionHeading tag="THE BIG PICTURE" title="How the pieces fit together."
+        description="One connected account feeds two services that are subscribed to, configured and billed independently."/>
+      <Overview/>
+    </section>
+    <section className="site-section site-section-muted"><div className="site-container">
       <SectionHeading tag="GETTING STARTED" title="From invitation to useful results."
         description="W-Bot's setup keeps account access, group authorization and feature controls explicit."/>
       <Steps/>
-    </section>
-    <section className="site-section site-section-muted"><div className="site-container">
+    </div></section>
+    <section className="site-section site-container">
       <SectionHeading tag="PICK A SERVICE" title="Different outcomes. Separate processing."/>
       <div className="site-flow-grid">
         <article className="site-flow-card"><span className="site-flow-icon"><Icon name="translate" size={22}/></span><h3>Translation pipeline</h3>
@@ -107,8 +121,8 @@ export function HowItWorks() {
             <li><strong>Optional alert delivery</strong><span>Choose a separate consented WhatsApp notification group.</span></li></ol>
         </article>
       </div>
-    </div></section>
-    <section className="site-section site-container"><PrivacyPanel/></section>
+    </section>
+    <section className="site-section site-section-muted"><div className="site-container"><PrivacyPanel/></div></section>
     <Cta/>
   </>;
 }
@@ -125,16 +139,21 @@ const questions: Array<[string,string]> = [
   ["What should I know about privacy?", "Only authorize groups whose participants have been appropriately informed. Group messages may be processed by configured translation or AI providers. Avoid processing confidential or sensitive material without an appropriate legal basis and permission."],
   ["Where can I manage my account?", "Sign in to the customer portal to manage WhatsApp connections, service access, groups, searches, match inbox and workspace settings."]
 ];
+const questionIcons = ["info","plans","target","bell","shield","phone","sparkles","warning","key","lock","user"];
 export function FAQ() {
   return <>
     <PageHero tag="QUESTIONS & ANSWERS" title={<>Everything you need <em>to know.</em></>}
-      description="Straightforward answers about group access, subscriptions, privacy, AI matching and the current W-Bot pilot."/>
-    <section className="site-section site-container"><div className="site-faq-layout">
+      description="Straightforward answers about group access, subscriptions, privacy, AI matching and the current W-Bot pilot.">
+      <IconCluster center="info" label="Illustration: questions about privacy, groups, AI and plans"
+        items={[["lock","Privacy"],["sparkles","AI accuracy"],["plans","Plans"]]}/>
+    </PageHero>
+    <section className="site-section site-container"><TopicCards/></section>
+    <section className="site-section site-container site-faq-section"><div className="site-faq-layout">
       <div><Eyebrow>FREQUENTLY ASKED</Eyebrow><h2>Answers before you connect.</h2>
         <p>If you have a use case that isn't covered, contact SL Options about the W-Bot pilot.</p>
         <Action href="/contact/" secondary>Contact the team</Action></div>
-      <div className="site-faq-list">{questions.map(([question, answer])=><details key={question}>
-        <summary>{question}<span aria-hidden="true">+</span></summary>
+      <div className="site-faq-list">{questions.map(([question, answer], index)=><details key={question}>
+        <summary><span className="site-faq-q"><span className="site-faq-icon"><Icon name={questionIcons[index] ?? "info"} size={16}/></span>{question}</span><span className="site-faq-toggle" aria-hidden="true">+</span></summary>
         <p>{answer}</p></details>)}</div>
     </div></section>
     <Cta/>
@@ -143,7 +162,20 @@ export function FAQ() {
 export function Contact() {
   return <>
     <PageHero tag="GET IN TOUCH" title={<>Let's make your groups <em>work smarter.</em></>}
-      description="W-Bot is currently offered as an invite-only technical pilot. Tell SL Options about your groups and the services you want to explore."/>
+      description="W-Bot is currently offered as an invite-only technical pilot. Tell SL Options about your groups and the services you want to explore.">
+      <IconCluster center="chat" label="Illustration: a conversation about your groups with SL Options"
+        items={[["groups","Your groups"],["target","Your use case"],["key","Pilot invitation"]]}/>
+    </PageHero>
+    <section className="site-section site-container">
+      <SectionHeading tag="WHAT HAPPENS NEXT" title="From first message to your first group."
+        description="A short, human process while W-Bot is an invite-only pilot."/>
+      <Flow label="Pilot enquiry steps" nodes={[
+        {icon:"chat",title:"Get in touch",text:"Use the SL Options contact page and describe your groups."},
+        {icon:"target",title:"Discuss the fit",text:"We talk through your use case, capacity and authorization."},
+        {icon:"key",title:"Receive an invitation",text:"Invited customers get a code to create their workspace."},
+        {icon:"phone",title:"Connect and configure",text:"Link WhatsApp, pick groups and switch on the services you need.",tone:"teal"}
+      ]}/>
+    </section>
     <section className="site-section site-container">
       <div className="site-contact-layout">
         <div className="site-contact-main">

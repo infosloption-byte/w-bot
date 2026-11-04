@@ -87,3 +87,7 @@ If the root redirect remains in host Nginx, all new marketing pages except the h
 ## Next marketing enhancements
 
 Add reviewed W-Bot-specific privacy/terms pages, official social media previews with an approved brand asset, analytics with consent controls, case studies when evidence exists, verified domain indexing through Google Search Console and Bing Webmaster Tools, and optional SSR/prerendering for more robust SEO. A secure, rate-limited lead request backend may replace the corporate contact link when its mail workflow is configured and tested.
+
+## Visual design
+
+The public site uses a light "Clear Indigo" theme that shares the indigo + teal identity of the customer portal (`src/marketing.css`, scoped to the marketing entry). Illustrations live in `src/marketing-graphics.tsx` and are drawn with markup and CSS only (no external images, so the strict Nginx CSP is unaffected). Every product mock-up is labelled "Illustrative example"; no customer counts, testimonials or guaranteed results are shown.

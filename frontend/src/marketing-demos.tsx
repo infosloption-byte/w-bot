@@ -1,56 +1,15 @@
 import React from "react";
 import { Icon } from "./Icon.js";
 import { Eyebrow } from "./marketing-shared.js";
+import { MiniAlert, MiniTranslation } from "./marketing-graphics.js";
 
-export function Preview() {
-  return <div className="site-preview" aria-label="Illustrative W-Bot Translation and Smart Alerts preview">
-    <div className="site-preview-top">
-      <span className="site-preview-icon"><Icon name="groups" size={18}/></span>
-      <span><strong>Community workspace</strong><small>Authorized groups · Illustrative example</small></span>
-      <span className="site-preview-connected"><span/> Connected</span>
-    </div>
-    <div className="site-preview-content">
-      <div className="site-preview-chat">
-        <div className="site-preview-chat-head">
-          <Icon name="chat" size={16}/><span>Group conversation</span>
-          <span className="site-preview-counter">01</span>
-        </div>
-        <div className="site-message site-message-in">
-          <span>Incoming · English</span>
-          Is anyone available for a trip from Galle to Yala this weekend?
-          <small>11:42</small>
-        </div>
-        <div className="site-message site-message-out">
-          <span><Icon name="translate" size={13}/> W-Bot Translation</span>
-          <b>සිංහල</b>
-          <p>මේ සති අන්තයේ ගාල්ලේ සිට යාලට යාමට වාහනයක් තිබේද?</p>
-          <small>Reply to original message</small>
-        </div>
-      </div>
-      <div className="site-preview-alert">
-        <div className="site-preview-alert-head">
-          <span className="site-preview-spark"><Icon name="sparkles" size={17}/></span>
-          <div><strong>Smart Alerts</strong><small>Private match</small></div>
-          <span className="site-preview-live">MATCH</span>
-        </div>
-        <div className="site-preview-rule">My search <strong>Tours from Galle</strong></div>
-        <div className="site-preview-rule-pair"><span>Pickup area</span><b>Galle</b></div>
-        <div className="site-preview-rule-pair"><span>Destination</span><b>Yala</b></div>
-        <div className="site-preview-alert-detail">
-          <Icon name="check-circle" size={16}/><span>Message matches your requirements</span>
-        </div>
-        <small className="site-preview-meta">Saved to the private inbox. Optional group notifications are configured separately.</small>
-      </div>
-    </div>
-    <div className="site-preview-foot"><span>One workspace</span><span>Two independent services</span></div>
-  </div>;
-}
 export function ProductCards() {
   return <div className="site-products">
     <article className="site-product-card is-translation">
       <div className="site-product-card-top"><span className="site-product-icon"><Icon name="translate" size={25}/></span>
         <span className="site-product-kicker">01 / UNDERSTAND</span></div>
       <h3>Group Translation</h3><p>Keep multilingual groups in sync. W-Bot detects the source language, translates to selected languages and replies in the conversation.</p>
+      <MiniTranslation/>
       <div className="site-product-tags"><span>Language selection</span><span>Group replies</span><span>Admin-controlled</span></div>
       <a href="/translation/" className="site-link-arrow">Explore Translation <Icon name="arrow" size={18}/></a>
     </article>
@@ -58,6 +17,7 @@ export function ProductCards() {
       <div className="site-product-card-top"><span className="site-product-icon"><Icon name="sparkles" size={25}/></span>
         <span className="site-product-kicker">02 / DISCOVER</span></div>
       <h3>Smart Alerts</h3><p>Spot relevant opportunities across authorized groups. Describe what matters, let AI interpret new messages, and review matches in one place.</p>
+      <MiniAlert/>
       <div className="site-product-tags"><span>Intelligent rules</span><span>Private inbox</span><span>WhatsApp alerts</span></div>
       <a href="/smart-alerts/" className="site-link-arrow">Explore Smart Alerts <Icon name="arrow" size={18}/></a>
     </article>
