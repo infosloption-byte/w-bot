@@ -1,6 +1,7 @@
 # Batch 1 — Encrypted WhatsApp Session Vault
 
-**Status: code in review; migration and live deployment not yet performed.**
+**Status: code in review (PR #18); migration and live deployment not yet performed.**
+Master tracker: https://github.com/infosloption-byte/w-bot/issues/19
 Do not mark production complete until the acceptance checklist below is satisfied.
 
 ## Security architecture
