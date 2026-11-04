@@ -1,64 +1,23 @@
 import React from "react";
 import { Icon } from "./Icon.js";
 import { Eyebrow } from "./marketing-shared.js";
+import { MiniAlert, MiniTranslation } from "./marketing-graphics.js";
 
-export function Preview() {
-  return <div className="site-preview" aria-label="Illustrative W-Bot customer workspace preview">
-    <div className="site-preview-top">
-      <div className="site-preview-app"><span className="site-preview-appmark">W</span>
-        <div><strong>W-Bot Workspace</strong><small>Customer dashboard preview</small></div>
-      </div>
-      <div className="site-preview-connected"><span/> Example workspace</div>
-    </div>
-    <div className="site-preview-content">
-      <aside className="site-preview-sidebar" aria-label="Illustrative dashboard navigation">
-        <div className="site-preview-sidebar-title">WORKSPACE</div>
-        <div className="site-preview-sidebar-link is-current"><Icon name="dashboard" size={16}/> Overview</div>
-        <div className="site-preview-sidebar-link"><Icon name="translate" size={16}/> Translation</div>
-        <div className="site-preview-sidebar-link"><Icon name="bell" size={16}/> Smart Alerts</div>
-        <div className="site-preview-sidebar-link"><Icon name="groups" size={16}/> Groups</div>
-        <div className="site-preview-sidebar-foot"><Icon name="shield" size={15}/> Group access managed</div>
-      </aside>
-      <div className="site-preview-panel">
-        <div className="site-preview-panel-head">
-          <div><small>YOUR WORKSPACE</small><h3>Overview</h3></div>
-          <span className="site-preview-period">Example data</span>
-        </div>
-        <div className="site-preview-summary">
-          <div><span><Icon name="groups" size={16}/> Authorized groups</span><strong>02</strong><small>Selected by workspace</small></div>
-          <div><span><Icon name="inbox" size={16}/> Smart Alert matches</span><strong>01</strong><small>Private inbox</small></div>
-        </div>
-        <div className="site-preview-activity">
-          <div className="site-preview-activity-head"><strong>Recent activity</strong><span>Illustrative</span></div>
-          <div className="site-preview-activity-row"><span className="site-preview-activity-icon is-translation"><Icon name="translate" size={17}/></span>
-            <div><strong>Group message translated</strong><small>Community discussion · 2 languages</small></div>
-            <span className="site-preview-event is-done">Complete</span>
-          </div>
-          <div className="site-preview-activity-row"><span className="site-preview-activity-icon is-alert"><Icon name="bell" size={17}/></span>
-            <div><strong>Relevant request identified</strong><small>Saved search · Private inbox</small></div>
-            <span className="site-preview-event">New match</span>
-          </div>
-        </div>
-        <div className="site-preview-privacy"><Icon name="lock" size={14}/>
-          Only selected groups are enabled for each service.</div>
-      </div>
-    </div>
-    <div className="site-preview-foot"><span>Conceptual product preview — no live customer data</span></div>
-  </div>;
-}
 export function ProductCards() {
   return <div className="site-products">
     <article className="site-product-card is-translation">
       <div className="site-product-card-top"><span className="site-product-icon"><Icon name="translate" size={25}/></span>
-        <span className="site-product-kicker">SERVICE 01</span></div>
+        <span className="site-product-kicker">01 / UNDERSTAND</span></div>
       <h3>Group Translation</h3><p>Keep multilingual groups in sync. W-Bot detects the source language, translates to selected languages and replies in the conversation.</p>
+      <MiniTranslation/>
       <div className="site-product-tags"><span>Language selection</span><span>Group replies</span><span>Admin-controlled</span></div>
       <a href="/translation/" className="site-link-arrow">Explore Translation <Icon name="arrow" size={18}/></a>
     </article>
     <article className="site-product-card is-alerts">
       <div className="site-product-card-top"><span className="site-product-icon"><Icon name="sparkles" size={25}/></span>
-        <span className="site-product-kicker">SERVICE 02</span></div>
-      <h3>Smart Alerts</h3><p>Identify relevant messages in groups you authorize. Configure intelligent searches, review matches privately, and choose optional notifications.</p>
+        <span className="site-product-kicker">02 / DISCOVER</span></div>
+      <h3>Smart Alerts</h3><p>Spot relevant opportunities across authorized groups. Describe what matters, let AI interpret new messages, and review matches in one place.</p>
+      <MiniAlert/>
       <div className="site-product-tags"><span>Intelligent rules</span><span>Private inbox</span><span>WhatsApp alerts</span></div>
       <a href="/smart-alerts/" className="site-link-arrow">Explore Smart Alerts <Icon name="arrow" size={18}/></a>
     </article>
@@ -83,7 +42,7 @@ export function UseCaseExample() {
     <div className="site-example-condition"><span>Service</span><strong>Website development</strong></div>
     <div className="site-example-condition"><span>Area</span><strong>Colombo or Galle</strong></div>
     <div className="site-example-hit"><Icon name="check-circle" size={18}/><span>“Looking for someone to build our company website in Galle.”</span></div>
-    <small>Illustrative example. AI matches are probabilistic and should be reviewed.</small>
+    <small>Illustrative example. AI matches are probabilistic and should be verified.</small>
   </div>;
 }
 export function TranslationVisual() {
@@ -114,6 +73,6 @@ export function PrivacyPanel() {
     <span className="site-feature-icon"><Icon name="shield" size={24}/></span>
     <div><Eyebrow>GROUP CONTROL MATTERS</Eyebrow><h2>Opt-in by design.</h2>
       <p>W-Bot does not automatically join groups or read private direct chats for Smart Alerts. Users connect an account they control, select authorized groups and confirm appropriate participant notice. Third-party AI processing and WhatsApp linked-device limitations should be reviewed before onboarding sensitive groups.</p>
-      <a className="site-link-arrow" href="/trust/">Trust and data handling <Icon name="arrow" size={18}/></a></div>
+      <a className="site-link-arrow" href="/faq/">Read frequently asked questions <Icon name="arrow" size={18}/></a></div>
   </div>;
 }

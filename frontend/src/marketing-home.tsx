@@ -1,11 +1,13 @@
 import React from "react";
 import { Icon } from "./Icon.js";
 import { Action, Cta, Eyebrow, FeatureGrid, PageHero, SectionHeading } from "./marketing-shared.js";
-import { AlertsVisual, Preview, ProductCards, Steps, TranslationVisual, UseCaseExample } from "./marketing-demos.js";
+import { AlertsVisual, ProductCards, Steps, TranslationVisual, UseCaseExample } from "./marketing-demos.js";
+import { AlertsFilter, Flow, HeroScene, InboxMock, LanguageFan, Overview, UseCaseGrid } from "./marketing-graphics.js";
 
 export function Home() {
   return <>
     <section className="site-hero">
+      <div className="site-hero-orb is-one" aria-hidden="true"/><div className="site-hero-orb is-two" aria-hidden="true"/>
       <div className="site-container site-hero-layout">
         <div className="site-hero-copy">
           <Eyebrow>WHATSAPP GROUP WORKSPACE BY SL OPTIONS</Eyebrow>
@@ -17,13 +19,18 @@ export function Home() {
             <span><Icon name="lock" size={16}/> Private alerts inbox</span>
             <span><Icon name="settings" size={16}/> Your service controls</span></div>
         </div>
-        <Preview/>
+        <HeroScene/>
       </div>
     </section>
     <section className="site-section site-container">
       <SectionHeading tag="OUR PLATFORM" title="Two useful services. One clear workspace."
         description="Translate group messages and discover relevant updates. Activate either service independently, with separate group permissions and usage controls."/>
       <ProductCards/>
+    </section>
+    <section className="site-section site-container">
+      <SectionHeading tag="THE BIG PICTURE" center title="One connection. Two services. You stay in control."
+        description="Link a WhatsApp account you control, choose the groups, then switch on only the services you need."/>
+      <Overview/>
     </section>
     <section className="site-section site-section-muted"><div className="site-container">
       <SectionHeading tag="GETTING STARTED" title="A straightforward way to get started."
@@ -34,8 +41,7 @@ export function Home() {
     <section className="site-section site-container"><div className="site-split-layout">
       <div><SectionHeading tag="DESIGNED FOR REAL-WORLD WORK" title="Whatever your industry, tell W-Bot what matters."
           description="Smart Alerts aren't limited to travel bookings. Create your own conditions for the messages you're looking for."/>
-        <div className="site-use-case-tags"><span>Travel & transport</span><span>Recruitment</span>
-          <span>Property leads</span><span>Logistics</span><span>Service enquiries</span><span>Local communities</span></div>
+        <UseCaseGrid/>
         <a className="site-link-arrow" href="/smart-alerts/">Explore intelligent searches <Icon name="arrow" size={17}/></a>
       </div>
       <UseCaseExample/>
@@ -90,7 +96,17 @@ export function Translation() {
         {icon:"settings",title:"Independent service controls",body:"Translation has its own subscription, group limits and controls, separate from Smart Alerts."}
       ]}/>
     </section>
-    <section className="site-section site-section-muted"><div className="site-container site-detail-band">
+    <section className="site-section site-section-muted"><div className="site-container">
+      <SectionHeading tag="SEE IT IN ACTION" title="One message in. Every language covered."
+        description="W-Bot detects the source language and replies in the group with the translations you selected."/>
+      <LanguageFan/>
+      <Flow label="Translation workflow" nodes={[
+        {icon:"chat",title:"A member posts",text:"Any message in an approved group, in any supported language."},
+        {icon:"translate",title:"W-Bot translates",text:"Into the languages the group admin selected for that group."},
+        {icon:"check-circle",title:"Everyone follows along",text:"Replies appear in the same conversation, quoting the original.",tone:"teal"}
+      ]}/>
+    </div></section>
+    <section className="site-section site-container"><div className="site-detail-band">
       <div><Eyebrow>FAMILIAR BY DESIGN</Eyebrow><h2>No new app for group members to learn.</h2>
         <p>Messages remain in WhatsApp. W-Bot adds translations in the approved conversation, while group admins retain control over activation and languages.</p>
         <Action href="/pricing/" secondary>See Translation pricing</Action></div>
@@ -121,11 +137,21 @@ export function Alerts() {
         {icon:"shield",title:"Separate permissions",body:"Smart Alerts has independent subscription limits and consent controls, without changing Group Translation."}
       ]}/>
     </section>
-    <section className="site-section site-section-muted"><div className="site-container site-split-layout">
+    <section className="site-section site-section-muted"><div className="site-container">
+      <SectionHeading tag="FROM SCROLLING TO SHORTLIST" title="Let the search read the group for you."
+        description="W-Bot checks new messages in your selected groups against every condition in your saved search, then keeps the matches together."/>
+      <div className="site-pair"><AlertsFilter/><InboxMock/></div>
+      <Flow label="Smart Alerts workflow" nodes={[
+        {icon:"groups",title:"Pick authorized groups",text:"Monitor only groups you belong to and may use."},
+        {icon:"target",title:"Describe what matters",text:"Labels and values in your own words, for any industry."},
+        {icon:"sparkles",title:"AI checks new messages",text:"Matches need supporting evidence from the message."},
+        {icon:"inbox",title:"Review privately",text:"Matches land in your inbox; WhatsApp alerts are optional.",tone:"teal"}
+      ]}/>
+    </div></section>
+    <section className="site-section site-container"><div className="site-split-layout">
       <div><SectionHeading tag="ONE TOOL, MANY INDUSTRIES" title="Your search. Your terminology."
         description="Travel opportunities are one example—not the definition of Smart Alerts. Build searches for any business process where relevant group updates can be missed."/>
-        <div className="site-use-case-tags"><span>Transport requests</span><span>Property listings</span>
-          <span>Job vacancies</span><span>Freight availability</span><span>Customer enquiries</span></div>
+        <UseCaseGrid/>
       </div>
       <div className="site-example-card">
         <div className="site-example-head"><Icon name="bell" size={20}/> Example notification</div>

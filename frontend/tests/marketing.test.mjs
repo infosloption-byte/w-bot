@@ -91,7 +91,7 @@ test("professional design exposes grounded trust controls instead of unsupported
     assert.ok(trust.includes(phrase), phrase);
   for(const phrase of ["site-trust-section", "site-trust-grid", "site-trust-disclosure"])
     assert.ok(home.includes(phrase), phrase);
-  assert.ok(css.includes("--deep:#153044"));
+  assert.ok(css.includes("--m-brand:#4f46e5") && css.includes("--m-teal:#0d9488"));
   assert.ok(css.includes("background:#fff"));
   assert.ok(!css.includes("filter:blur(60px)"));
   assert.ok(!css.includes("transform:rotate(-1deg)"));
@@ -114,4 +114,17 @@ test("marketing theme does not change authenticated customer and platform layout
   assert.ok(!platform.includes('import "./marketing.css"'));
   assert.ok(nginx.includes("location /portal/api/"));
   assert.ok(nginx.includes("location /portal/platform/"));
+});
+
+test("PR17 illustrations and current trust/strip requirements coexist",()=>{
+  const graphics=read("src/marketing-graphics.tsx");
+  const demos=read("src/marketing-demos.tsx");
+  for(const component of ["HeroScene","Overview","UseCaseGrid","LanguageFan","AlertsFilter","InboxMock","Flow","MiniTranslation","MiniAlert"])
+    assert.ok(graphics.includes("export function "+component), component);
+  assert.ok(home.includes("<HeroScene/>") && home.includes("<Overview/>"));
+  assert.ok(home.includes("site-trust-section"));
+  assert.ok(!home.includes("site-value-strip"));
+  assert.ok(!css.includes(".site-value-inner"));
+  assert.ok(demos.includes("<MiniTranslation/>") && demos.includes("<MiniAlert/>"));
+  assert.ok(css.includes(".gx-scene") && css.includes(".site-trust-detail"));
 });
