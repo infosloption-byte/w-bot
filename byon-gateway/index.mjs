@@ -215,6 +215,30 @@ async function connectSession(id, phoneNumber, allowNew = false) {
     phoneNumber: phoneNumber || null, pairingRequested: false, recentOutboundIds: new Set()
   };
   sessions.set(id, entry);
+  function failAuthPersistence() {
+    if (entry.stopped) return;
+    entry.stopped = true;
+    entry.connected = false;
+    entry.status = "DISCONNECTED";
+    clearTimeout(entry.retryTimer);
+    sessions.delete(id);
+    try { entry.socket?.end?.(new Error("Auth storage unavailable")); } catch { /* noop */ }
+    void entry.vault?.close().catch(() => {});
+    void report(id, "DISCONNECTED");
+    console.error("BYON auth storage unavailable; session stopped");
+  }
+  // A failed Signal-key write is just as serious as a failed creds.update:
+  // the gateway must never process new messages using unpersisted keys.
+  if (entry.vault) {
+    const persistKeys = state.keys.set.bind(state.keys);
+    state.keys.set = async records => {
+      try { return await persistKeys(records); }
+      catch {
+        failAuthPersistence();
+        throw Error("Signal key storage unavailable");
+      }
+    };
+  }
   function attach() {
     if (entry.stopped) return;
     const ws = makeWASocket({
@@ -224,19 +248,7 @@ async function connectSession(id, phoneNumber, allowNew = false) {
     });
     entry.socket = ws;
     ws.ev.on("creds.update", () => {
-      void Promise.resolve(saveCreds()).catch(() => {
-        // A session whose credentials cannot be durably saved must not
-        // continue processing group messages with stale Signal state.
-        entry.stopped = true;
-        entry.connected = false;
-        entry.status = "DISCONNECTED";
-        clearTimeout(entry.retryTimer);
-        sessions.delete(id);
-        try { ws.end(new Error("Auth storage unavailable")); } catch { /* noop */ }
-        void entry.vault?.close().catch(() => {});
-        void report(id, "DISCONNECTED");
-        console.error("BYON auth persistence unavailable; session stopped");
-      });
+      void Promise.resolve(saveCreds()).catch(failAuthPersistence);
     });
     ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
       if (entry.socket !== ws || entry.stopped) return;
