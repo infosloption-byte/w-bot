@@ -1,5 +1,8 @@
 # W-Bot Security Hardening — Master Tracker
 
+GitHub tracking issue: https://github.com/infosloption-byte/w-bot/issues/19
+Batch 1 implementation PR: https://github.com/infosloption-byte/w-bot/pull/18
+
 Owner: W-Bot / SL Options
 Started: 2026-11-04
 Status: ACTIVE. This tracker is the source of truth for security work across branches, PRs, production checks and future releases.
