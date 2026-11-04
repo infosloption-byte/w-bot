@@ -1,0 +1,51 @@
+# Apply ONLY after legacy auth is migrated and verified.
+# Docker Compose v2.24+ required for !override (never merge auth volumes).
+# Running plain docker-compose.yml after cutover re-enables legacy auth.
+services:
+  byon-gateway:
+    environment:
+      BYON_AUTH_MODE: kms
+      BYON_VAULT_DIR: /data/vault
+      BYON_KMS_KEY_ID: ${BYON_KMS_KEY_ID:?Set KMS key ARN in .env}
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/kms_credentials
+    # Do NOT mount the legacy auth volume into the vault-enabled gateway.
+    volumes: !override
+      - wbot_byon_vault:/data/vault
+    secrets:
+      - kms_credentials
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 256
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+
+  byon-vault-migrate:
+    profiles: ["vault-migrate"]
+    build:
+      context: .
+      dockerfile: byon-gateway/Dockerfile
+    entrypoint: ["node","migrate-vault.mjs"]
+    environment:
+      BYON_LEGACY_AUTH_DIR: /data/legacy-auth
+      BYON_VAULT_DIR: /data/vault
+      BYON_KMS_KEY_ID: ${BYON_KMS_KEY_ID:?Set KMS key ARN in .env}
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/kms_credentials
+    user: node
+    volumes:
+      - wbot_byon_auth:/data/legacy-auth:ro
+      - wbot_byon_vault:/data/vault
+    secrets:
+      - kms_credentials
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 256
+    read_only: true
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+
+volumes:
+  wbot_byon_vault:
+
+secrets:
+  kms_credentials:
+    file: ${BYON_KMS_CREDENTIALS_FILE:?Set absolute KMS credentials file path in .env}
