@@ -6,3 +6,8 @@ dist/
 *.log
 coverage/
 .DS_Store
+
+# Local KMS credentials, auth material and emergency backups
+secrets/
+*.auth-backup
+vault-backups/
