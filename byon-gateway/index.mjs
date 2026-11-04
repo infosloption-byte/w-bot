@@ -153,8 +153,10 @@ async function activation(entry, msg, incoming, code) {
 // Serialize connection initialization per ID. A pair request and policy sync
 // must never initialize two Baileys sockets or two KMS keys simultaneously.
 const pendingConnections = new Map();
+const revokingConnections = new Set();
 async function connect(id, phoneNumber, allowNew = false) {
   if (!idValid(id)) throw Error("Invalid connection ID");
+  if (revokingConnections.has(id)) throw Error("Connection revocation in progress");
   const pending = pendingConnections.get(id);
   if (pending) return pending;
   const started = connectSession(id, phoneNumber, allowNew);
@@ -344,18 +346,27 @@ async function connectSession(id, phoneNumber, allowNew = false) {
   return entry;
 }
 async function revoke(id) {
-  const entry = sessions.get(id);
-  if (entry) {
-    entry.stopped = true;
-    clearTimeout(entry.retryTimer);
-    sessions.delete(id);
-    try { await entry.socket?.logout(); } catch { /* unlink may be offline */ }
-    try { entry.socket?.end?.(new Error("Connection revoked")); } catch { /* noop */ }
-    await entry.vault?.close();
+  if (!idValid(id)) throw Error("Invalid connection ID");
+  if (revokingConnections.has(id)) throw Error("Revocation already in progress");
+  revokingConnections.add(id);
+  try {
+    // Wait for any pending pairing/bootstrap before revoking; otherwise
+    // a delayed start could recreate credentials after their deletion.
+    await pendingConnections.get(id)?.catch(() => {});
+    const entry = sessions.get(id);
+    if (entry) {
+      entry.stopped = true;
+      clearTimeout(entry.retryTimer);
+      sessions.delete(id);
+      try { await entry.socket?.logout(); } catch { /* unlink may be offline */ }
+      try { entry.socket?.end?.(new Error("Connection revoked")); } catch { /* noop */ }
+      await entry.vault?.close();
+    }
+    // Only the selected connection's dedicated auth directory is deleted.
+    await rm(join(authMode === "kms" ? vaultRoot : authRoot, id), { recursive: true, force: true });
+  } finally {
+    revokingConnections.delete(id);
   }
-  // Delete ONLY this customer's dedicated auth dir; the legacy volume is
-  // not mounted into a KMS-enabled gateway and must never be touched here.
-  await rm(join(authMode === "kms" ? vaultRoot : authRoot, id), { recursive: true, force: true });
 }
 const server = createServer(async (req, res) => {
   if (!auth(req)) return respond(res,401,{error:"Unauthorized"});
