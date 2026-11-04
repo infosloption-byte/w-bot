@@ -97,6 +97,16 @@ test("professional design exposes grounded trust controls instead of unsupported
   assert.ok(!css.includes("transform:rotate(-1deg)"));
 });
 
+test("homepage moves directly from the hero into the service overview, without the old control strip",()=>{
+  assert.ok(!home.includes('className="site-value-strip"'));
+  assert.ok(!home.includes("Group authorization controls"));
+  assert.ok(!home.includes("Customer-owned connections</span>"));
+  assert.ok(!home.includes("Separate service permissions</span>"));
+  assert.ok(!css.includes(".site-value-strip"));
+  assert.ok(!css.includes(".site-value-inner"));
+  assert.ok(home.includes("site-trust-section"), "full trust and transparency section remains available");
+});
+
 test("marketing theme does not change authenticated customer and platform layouts",()=>{
   const customer=read("src/main.tsx");
   const platform=read("src/platform-main.tsx");
