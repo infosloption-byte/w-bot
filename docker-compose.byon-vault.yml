@@ -11,13 +11,18 @@ services:
     # Do NOT mount the legacy auth volume into the vault-enabled gateway.
     volumes: !override
       - wbot_byon_vault:/data/vault
+      # Long-form tmpfs prevents Docker Compose from misparsing noexec/nosuid
+      # as mount destinations, while retaining the original 16 MiB size cap.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 16777216
     secrets:
       - kms_credentials
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     pids_limit: 256
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
 
   byon-vault-migrate:
     profiles: ["vault-migrate"]
@@ -34,6 +39,10 @@ services:
     volumes:
       - wbot_byon_auth:/data/legacy-auth:ro
       - wbot_byon_vault:/data/vault
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 16777216
     secrets:
       - kms_credentials
     networks: [private]
@@ -41,7 +50,6 @@ services:
     cap_drop: [ALL]
     pids_limit: 256
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
 
 volumes:
   wbot_byon_vault:
