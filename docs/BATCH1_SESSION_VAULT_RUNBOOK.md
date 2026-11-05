@@ -2,6 +2,8 @@
 
 **Status: code in review (PR #18); migration and live deployment not yet performed.**
 Master tracker: https://github.com/infosloption-byte/w-bot/issues/19
+
+**Disposable test connection shortcut (operator-approved):** If the sole legacy WhatsApp connection is disposable and the operator accepts re-pairing and loss of registered test groups/history, follow [BATCH1_TEST_FRESH_PAIR_CUTOVER.md](./BATCH1_TEST_FRESH_PAIR_CUTOVER.md) instead. Never run the full 475-record migration or require off-host backup of that discarded TEST session; the production migration/recovery gates remain open.
 Do not mark production complete until the acceptance checklist below is satisfied.
 
 ## Security architecture

@@ -19,7 +19,7 @@ Status: ACTIVE. This tracker is the source of truth for security work across bra
 ## Batch 1 — WhatsApp Authentication Vault (P0)
 
 Branch: security/batch1-encrypted-whatsapp-session-vault-20261104
-Release state: CODE BUILD VALIDATED ON LIGHTSAIL; KMS SETUP AND PRODUCTION MIGRATION PENDING
+Release state: CODE MERGED; AWS KMS GENERATE/DECRYPT VERIFIED; DISPOSABLE TEST FRESH PAIRING PENDING; REAL CUSTOMER RECOVERY NOT VALIDATED
 
 ### Code deliverables
 
@@ -34,7 +34,11 @@ Release state: CODE BUILD VALIDATED ON LIGHTSAIL; KMS SETUP AND PRODUCTION MIGRA
 - [x] Offline migration runbook with source volume retention and secure recovery requirements
 - [x] Regression tests: round-trip, restart, key deletion, corruption, wrong connection and migration failure
 - [x] Isolated Lightsail Docker build and bundled gateway unit tests passed (2026-11-05, feature head ce1a36f)
-- [ ] Live KMS-mode runtime integration tests after AWS KMS provisioning and controlled migration
+- [x] KMS GenerateDataKey/Decrypt round-trip on Lightsail with restricted file credential (2026-11-05)
+- [x] Docker Compose long-form tmpfs mount runtime validation and PR #20 merged (2026-11-05)
+- [x] Operator confirmed old one-session 475-record auth set is disposable test data; off-host backup and 475-record migration waived for TEST cutover only
+- [ ] Live KMS-mode fresh pairing, encrypted record storage, restart persistence and Translation/Smart Alerts smoke tests
+- [ ] Real-session migration and encrypted vault backup/restore validation (required before real customer onboarding)
 - [ ] Independent security review of migration and AWS KMS permissions
 - [ ] Production AWS KMS key and restricted credential identity provisioned
 - [ ] Verified encrypted off-host pre-migration backup
@@ -42,7 +46,9 @@ Release state: CODE BUILD VALIDATED ON LIGHTSAIL; KMS SETUP AND PRODUCTION MIGRA
 - [ ] Encrypted vault backup/restore drill and written cutover acceptance
 - [ ] Legacy plaintext volume/snapshot retirement and incident-response readiness
 
-Important: Batch 1 is not finished until operations are verified; deployment is deliberately deferred.
+Test cutover guide: [BATCH1_TEST_FRESH_PAIR_CUTOVER.md](./BATCH1_TEST_FRESH_PAIR_CUTOVER.md). Full migration runbook still applies to real customers. Backup/migration waiver is limited to the disposable test session.
+
+Important: Batch 1 is not finished until operations are verified; the BYON gateway has not been cut over.
 
 ## Batch 2 — Identity, MFA & Access Authorization (P0, NOT STARTED)
 
@@ -81,8 +87,8 @@ Important: Batch 1 is not finished until operations are verified; deployment is 
 | --- | --- | --- |
 | 2026-11-04 | Code-level Batch 1 implementation on isolated branch | Completed for review |
 | 2026-11-05 | Lightsail isolated Docker build of feature head ce1a36f, including vault unit tests | Passed; image wbot-vault-validation-byon-gateway |
-| Pending | AWS KMS key and IAM principal creation | Not done |
-| Pending | Live migration and decrypt-by-record verification | Not done |
+| 2026-11-05 | KMS key created and GenerateDataKey/Decrypt verified from migration container | Cryptography PASS; least-privilege IAM review pending |
+| 2026-11-05 | Test-only decision: skip old 475-record migration and re-pair in new encrypted vault | Operator approved; NOT YET performed |
 | Pending | Encrypted-vault runtime cutover | Not done |
 | Pending | Backups, restore tests and plaintext retirement | Not done |
 
