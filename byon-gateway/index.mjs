@@ -5,7 +5,8 @@ import pino from "pino";
 import QRCode from "qrcode";
 import { createServer } from "node:http";
 import { join } from "node:path";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readFile } from "node:fs/promises";
+import { createKmsProvider, openSessionVault } from "./auth-vault.mjs";
 import { timingSafeEqual } from "node:crypto";
 import { extractByonLiveMessage } from "./message-routing.mjs";
 import { resolveSenderPhone } from "./sender-phone.mjs";
@@ -15,6 +16,20 @@ import { isGroupJid, extractLiveMessage, buildQuotedMessage, isVerifiedGroupAdmi
 process.umask(0o077);
 const token = process.env.BYON_GATEWAY_TOKEN || "";
 const authRoot = process.env.BYON_AUTH_DIR || "/data/auth";
+const vaultRoot = process.env.BYON_VAULT_DIR || "/data/vault";
+const authMode = process.env.BYON_AUTH_MODE || "legacy";
+if (authMode !== "legacy" && authMode !== "kms") throw Error("Unsupported BYON_AUTH_MODE");
+// Never start encrypted mode with a non-persistent directory, nor while the
+// plaintext legacy volume is accidentally still mounted into this container.
+if (authMode === "kms") {
+  const lines = (await readFile("/proc/self/mountinfo", "utf8")).split("\n");
+  const mounts = new Set(lines.map(line => line.split(" - ")[0].split(" ")[4]));
+  if (!mounts.has(vaultRoot) || mounts.has(authRoot))
+    throw Error("Encrypted vault volume missing or legacy auth volume still mounted");
+}
+const vaultProvider = authMode === "kms"
+  ? await createKmsProvider(process.env.BYON_KMS_KEY_ID)
+  : null;
 const port = Number(process.env.PORT || 9039);
 const apiOrigin = process.env.BYON_API_ORIGIN || "http://api:9028";
 const maxSessions = Number(process.env.BYON_MAX_SESSIONS || 20);
@@ -135,7 +150,21 @@ async function activation(entry, msg, incoming, code) {
     } catch { /* reply is optional */ }
   } catch { console.warn("BYON activation metadata check failed"); }
 }
-async function connect(id, phoneNumber) {
+// Serialize connection initialization per ID. A pair request and policy sync
+// must never initialize two Baileys sockets or two KMS keys simultaneously.
+const pendingConnections = new Map();
+const revokingConnections = new Set();
+async function connect(id, phoneNumber, allowNew = false) {
+  if (!idValid(id)) throw Error("Invalid connection ID");
+  if (revokingConnections.has(id)) throw Error("Connection revocation in progress");
+  const pending = pendingConnections.get(id);
+  if (pending) return pending;
+  const started = connectSession(id, phoneNumber, allowNew);
+  pendingConnections.set(id, started);
+  try { return await started; }
+  finally { if (pendingConnections.get(id) === started) pendingConnections.delete(id); }
+}
+async function connectSession(id, phoneNumber, allowNew = false) {
   if (!idValid(id)) throw Error("Invalid connection ID");
   const existing = sessions.get(id);
   if (existing && !existing.stopped) {
@@ -144,6 +173,7 @@ async function connect(id, phoneNumber) {
       existing.stopped = true;
       try { existing.socket?.end?.(new Error("Expired pairing session")); } catch { /* noop */ }
       sessions.delete(id);
+      void existing.vault?.close().catch(() => {});
     } else {
       // Customers can change from QR to pairing-code mode without resetting
       // a still-valid linked-device session. Never log the phone or code.
@@ -167,16 +197,48 @@ async function connect(id, phoneNumber) {
     }
   }
   if (sessions.size >= maxSessions) throw Error("SESSION_CAPACITY_REACHED");
-  const directory = join(authRoot, id);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const { state, saveCreds } = await useMultiFileAuthState(directory);
+  // In KMS mode never access the old plaintext auth directory. Existing
+  // sessions must have been migrated; a bootstrap cannot recreate credentials.
+  const store = authMode === "kms"
+    ? await openSessionVault(vaultRoot, id, vaultProvider, { allowCreate: allowNew })
+    : await (async () => {
+      const directory = join(authRoot, id);
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      return useMultiFileAuthState(directory);
+    })();
+  const { state, saveCreds } = store;
   const entry = {
-    id, socket: null, connected: false, status: "PAIRING",
+    id, vault: "close" in store ? store : null,
+    socket: null, connected: false, status: "PAIRING",
     pairingCode: null, qrDataUrl: null, qrUntil: 0,
     phoneLast4: null, stopped: false, retry: 0, retryTimer: null,
     phoneNumber: phoneNumber || null, pairingRequested: false, recentOutboundIds: new Set()
   };
   sessions.set(id, entry);
+  function failAuthPersistence() {
+    if (entry.stopped) return;
+    entry.stopped = true;
+    entry.connected = false;
+    entry.status = "DISCONNECTED";
+    clearTimeout(entry.retryTimer);
+    sessions.delete(id);
+    try { entry.socket?.end?.(new Error("Auth storage unavailable")); } catch { /* noop */ }
+    void entry.vault?.close().catch(() => {});
+    void report(id, "DISCONNECTED");
+    console.error("BYON auth storage unavailable; session stopped");
+  }
+  // A failed Signal-key write is just as serious as a failed creds.update:
+  // the gateway must never process new messages using unpersisted keys.
+  if (entry.vault) {
+    const persistKeys = state.keys.set.bind(state.keys);
+    state.keys.set = async records => {
+      try { return await persistKeys(records); }
+      catch {
+        failAuthPersistence();
+        throw Error("Signal key storage unavailable");
+      }
+    };
+  }
   function attach() {
     if (entry.stopped) return;
     const ws = makeWASocket({
@@ -185,7 +247,9 @@ async function connect(id, phoneNumber) {
       syncFullHistory: false, markOnlineOnConnect: false
     });
     entry.socket = ws;
-    ws.ev.on("creds.update", saveCreds);
+    ws.ev.on("creds.update", () => {
+      void Promise.resolve(saveCreds()).catch(failAuthPersistence);
+    });
     ws.ev.on("connection.update", ({ connection, qr, lastDisconnect }) => {
       if (entry.socket !== ws || entry.stopped) return;
       if (qr && !ws.authState.creds.registered) {
@@ -221,6 +285,7 @@ async function connect(id, phoneNumber) {
           entry.stopped = true;
           void report(id, entry.status);
           sessions.delete(id);
+          void entry.vault?.close().catch(() => {});
           console.warn("BYON linked session requires repair");
           return;
         }
@@ -232,7 +297,8 @@ async function connect(id, phoneNumber) {
           // Reopen with fresh on-disk credentials after any reconnect.
           entry.stopped = true;
           sessions.delete(id);
-          void connect(id).catch(() => console.warn("BYON reconnect failed"));
+          void entry.vault?.close().then(() => connect(id)).catch(() => console.warn("BYON reconnect failed"));
+          if (!entry.vault) void connect(id).catch(() => console.warn("BYON reconnect failed"));
         }, Math.min(60000, 1500 * 2 ** Math.min(entry.retry, 5)));
       }
     });
@@ -281,21 +347,38 @@ async function connect(id, phoneNumber) {
       }
     });
   }
-  attach();
+  try { attach(); }
+  catch (error) {
+    entry.stopped = true;
+    sessions.delete(id);
+    await entry.vault?.close().catch(() => {});
+    throw error;
+  }
   void report(id, "PAIRING");
   return entry;
 }
 async function revoke(id) {
-  const entry = sessions.get(id);
-  if (entry) {
-    entry.stopped = true;
-    clearTimeout(entry.retryTimer);
-    sessions.delete(id);
-    try { await entry.socket?.logout(); } catch { /* unlink may be offline */ }
-    try { entry.socket?.end?.(new Error("Connection revoked")); } catch { /* noop */ }
+  if (!idValid(id)) throw Error("Invalid connection ID");
+  if (revokingConnections.has(id)) throw Error("Revocation already in progress");
+  revokingConnections.add(id);
+  try {
+    // Wait for any pending pairing/bootstrap before revoking; otherwise
+    // a delayed start could recreate credentials after their deletion.
+    await pendingConnections.get(id)?.catch(() => {});
+    const entry = sessions.get(id);
+    if (entry) {
+      entry.stopped = true;
+      clearTimeout(entry.retryTimer);
+      sessions.delete(id);
+      try { await entry.socket?.logout(); } catch { /* unlink may be offline */ }
+      try { entry.socket?.end?.(new Error("Connection revoked")); } catch { /* noop */ }
+      await entry.vault?.close();
+    }
+    // Only the selected connection's dedicated auth directory is deleted.
+    await rm(join(authMode === "kms" ? vaultRoot : authRoot, id), { recursive: true, force: true });
+  } finally {
+    revokingConnections.delete(id);
   }
-  // Delete ONLY this customer's dedicated auth dir, never shared W-Bot credentials.
-  await rm(join(authRoot, id), { recursive: true, force: true });
 }
 const server = createServer(async (req, res) => {
   if (!auth(req)) return respond(res,401,{error:"Unauthorized"});
@@ -308,7 +391,7 @@ const server = createServer(async (req, res) => {
       const input = await body(req);
       if (input.phoneNumber && !phoneValid(input.phoneNumber))
         return respond(res,400,{error:"Invalid pairing number"});
-      await connect(id, input.phoneNumber);
+      await connect(id, input.phoneNumber, true);
       return respond(res,202,{started:true});
     }
     if (req.method === "POST" && action === "revoke") {
@@ -396,6 +479,7 @@ async function synchronize() {
     clearTimeout(entry.retryTimer);
     sessions.delete(id);
     try { entry.socket?.end?.(new Error("Session paused by policy")); } catch { /* noop */ }
+    void entry.vault?.close().catch(() => {});
     void report(id, "DISCONNECTED");
   }
   for (const id of allowed) {
