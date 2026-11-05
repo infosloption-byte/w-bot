@@ -6,6 +6,7 @@ import { parseRequestJson } from "../src/json-body.js";
 test("empty JSON DELETE from cached portal is accepted without parsing failure", async () => {
   assert.equal(parseRequestJson("DELETE", Buffer.alloc(0)), undefined);
   const app = Fastify();
+  app.removeContentTypeParser("application/json");
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
     try { done(null, parseRequestJson(request.method, body as Buffer)); }
     catch (error) { done(error as Error, undefined); }
@@ -42,6 +43,7 @@ test("malformed and empty JSON POST are 400 client errors, not internal server e
     );
   }
   const app = Fastify();
+  app.removeContentTypeParser("application/json");
   app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
     try { done(null, parseRequestJson(request.method, body as Buffer)); }
     catch (error) { done(error as Error, undefined); }
