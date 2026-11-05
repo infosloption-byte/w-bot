@@ -350,3 +350,88 @@ test("gateway revoke failure leaves connection disabled for safe retry, not fals
     await app.close();
   }
 });
+
+test("direct Translation selection refuses a joined group without verified admin rights", async () => {
+  const id = "cktb92lxp000007n3qux1329d";
+  let wrote = false;
+  const db = {
+    portalSession: { findUnique: async () => session },
+    customerWhatsAppConnection: { findFirst: async ({where}: {where: {tenantId:string}}) => {
+      assert.equal(where.tenantId, user.tenantId);
+      return { id, tenantId:user.tenantId, status:"CONNECTED", active:true, kind:"BUSINESS" };
+    } },
+    whatsAppConnectionPolicy: { findUnique: async () => ({
+      customerNumbersEnabled:true, personalEnabled:true, businessEnabled:true
+    }) },
+    $transaction: async () => { wrote = true; }
+  } as unknown as PrismaClient;
+  const prior = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    groups:[{groupId:"12345678901@g.us",name:"Joined group",adminVerified:false}]
+  }),{status:200});
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  try {
+    const r=await app.inject({method:"POST",url:"/portal/api/translation/groups/bulk",
+      headers:userHeaders,payload:{connectionId:id,groupIds:["12345678901@g.us"],consentConfirmed:true}});
+    assert.equal(r.statusCode,403);
+    assert.equal(wrote,false);
+  } finally {globalThis.fetch=prior;await app.close();}
+});
+
+test("direct Translation group setup enables only verified group-admin selections with defaults",async()=>{
+  const id="cktb92lxp000007n3qux1329d";
+  const saved: Array<{connectionKey:string;tenantId:string;whatsappGroupId:string;targetLanguages:string[]}> = [];
+  const tx = {
+    $queryRaw: async () => [],
+    tenantSubscription: {findUnique:async()=>({planCode:"PILOT",groupLimit:20,
+      whatsappConnectionLimit:0,status:"TRIAL",periodEnd:null,translationEnabled:true})},
+    group: { findMany:async()=>[],count:async()=>0,
+      create:async({data}: {data:typeof saved[number]})=>{ saved.push(data);return {id:"group-new"}; } },
+    tenantAudit: {create:async()=>({})}
+  };
+  const db={
+    portalSession:{findUnique:async()=>session},
+    customerWhatsAppConnection:{findFirst:async()=>({
+      id,tenantId:user.tenantId,status:"CONNECTED",active:true,kind:"BUSINESS"
+    })},
+    whatsAppConnectionPolicy:{findUnique:async()=>({
+      customerNumbersEnabled:true,personalEnabled:true,businessEnabled:true
+    })},
+    languageCatalog:{findMany:async()=>[
+      {code:"en",name:"English"},{code:"si",name:"Sinhala"},{code:"he",name:"Hebrew"}
+    ]},
+    $transaction:async(fn:(tx:typeof tx)=>Promise<unknown>)=>fn(tx)
+  } as unknown as PrismaClient;
+  const previous=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(JSON.stringify({groups:[
+    {groupId:"12345678901@g.us",name:"Permitted group",adminVerified:true},
+    {groupId:"12345678902@g.us",name:"No admin",adminVerified:false}
+  ]}),{status:200});
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  try {
+    const r=await app.inject({method:"POST",url:"/portal/api/translation/groups/bulk",
+      headers:userHeaders,payload:{connectionId:id,groupIds:["12345678901@g.us"],consentConfirmed:true}});
+    assert.equal(r.statusCode,201);
+    assert.deepEqual(r.json(),{activated:1});
+    assert.equal(saved.length,1);
+    assert.equal(saved[0].connectionKey,connectionKey(id));
+    assert.equal(saved[0].tenantId,user.tenantId);
+    assert.deepEqual(saved[0].targetLanguages,["he","en","si"]);
+  } finally {globalThis.fetch=previous;await app.close();}
+});
+
+test("direct Translation selection rejects another tenant's connection",async()=>{
+  const db={
+    portalSession:{findUnique:async()=>session},
+    customerWhatsAppConnection:{findFirst:async({where}:{where:{tenantId:string}})=>{
+      assert.equal(where.tenantId,user.tenantId);return null;
+    }}
+  } as unknown as PrismaClient;
+  const app=Fastify();registerByonPortalRoutes(app,db,cfg);
+  try {
+    const r=await app.inject({method:"POST",url:"/portal/api/translation/groups/bulk",
+      headers:userHeaders,payload:{connectionId:"cktb92lxp000007n3qux1329d",
+        groupIds:["12345678901@g.us"],consentConfirmed:true}});
+    assert.equal(r.statusCode,404);
+  } finally {await app.close();}
+});
