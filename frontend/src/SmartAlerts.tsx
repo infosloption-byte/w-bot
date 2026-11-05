@@ -236,7 +236,7 @@ export function SmartAlerts({
             })}
           </div>
           <div className="unified-picker-heading">3. Confirm and enable monitoring</div>
-          <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed
+          <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed}
             onChange={e => setConsent(e.target.checked)}/>
             <span>I have authority to monitor these groups and participants have been informed that selected messages are analyzed by an external AI provider.</span>
           </label>
