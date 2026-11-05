@@ -19,7 +19,7 @@ Status: ACTIVE. This tracker is the source of truth for security work across bra
 ## Batch 1 — WhatsApp Authentication Vault (P0)
 
 Branch: security/batch1-encrypted-whatsapp-session-vault-20261104
-Release state: IMPLEMENTATION IN REVIEW; PRODUCTION PENDING
+Release state: CODE BUILD VALIDATED ON LIGHTSAIL; KMS SETUP AND PRODUCTION MIGRATION PENDING
 
 ### Code deliverables
 
@@ -33,7 +33,8 @@ Release state: IMPLEMENTATION IN REVIEW; PRODUCTION PENDING
 - [x] Separate vault-only production Compose overlay (old plaintext auth volume only in migration job)
 - [x] Offline migration runbook with source volume retention and secure recovery requirements
 - [x] Regression tests: round-trip, restart, key deletion, corruption, wrong connection and migration failure
-- [ ] Full isolated Docker build and runtime tests on Lightsail
+- [x] Isolated Lightsail Docker build and bundled gateway unit tests passed (2026-11-05, feature head ce1a36f)
+- [ ] Live KMS-mode runtime integration tests after AWS KMS provisioning and controlled migration
 - [ ] Independent security review of migration and AWS KMS permissions
 - [ ] Production AWS KMS key and restricted credential identity provisioned
 - [ ] Verified encrypted off-host pre-migration backup
@@ -78,8 +79,8 @@ Important: Batch 1 is not finished until operations are verified; deployment is 
 
 | Date | Milestone | State |
 | --- | --- | --- |
-| 2026-11-04 | Code-level Batch 1 implementation on isolated branch | In progress |
-| Pending | Lightsail isolated Docker build including vault tests | Not run |
+| 2026-11-04 | Code-level Batch 1 implementation on isolated branch | Completed for review |
+| 2026-11-05 | Lightsail isolated Docker build of feature head ce1a36f, including vault unit tests | Passed; image wbot-vault-validation-byon-gateway |
 | Pending | AWS KMS key and IAM principal creation | Not done |
 | Pending | Live migration and decrypt-by-record verification | Not done |
 | Pending | Encrypted-vault runtime cutover | Not done |
