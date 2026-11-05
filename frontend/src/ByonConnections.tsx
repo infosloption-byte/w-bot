@@ -19,7 +19,12 @@ type Details = {
 async function request<T>(url: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch("/portal/api" + url, {
     method, credentials: "same-origin", cache: "no-store",
-    headers: method === "GET" ? {} : { "Content-Type": "application/json", "X-WBot-Request": "1" },
+    // An empty DELETE must not advertise JSON: Fastify would try to parse an
+    // absent payload. Still send the CSRF/mutation header for state changes.
+    headers: method === "GET" ? {} : {
+      "X-WBot-Request": "1",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" })
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
   const result = await response.json().catch(() => ({}));

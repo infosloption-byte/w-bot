@@ -17,6 +17,7 @@ import { ingestWatchedMessage, processPendingAlerts } from "./alerts-service.js"
 import { processAlertDeliveries } from "./alerts-delivery.js";
 import { ingestTenantMessage } from "./quotas.js";
 import { runRetention } from "./retention.js";
+import { parseRequestJson } from "./json-body.js";
 import { checkGatewayHealth } from "./gateway-health.js";
 
 const cfg = loadConfig();
@@ -59,7 +60,7 @@ const simulationSchema = z.object({
 app.removeContentTypeParser("application/json");
 app.addContentTypeParser("application/json", { parseAs: "buffer" }, (request, body, done) => {
   (request as typeof request & { rawBody?: Buffer }).rawBody = body as Buffer;
-  try { done(null, JSON.parse((body as Buffer).toString("utf8"))); }
+  try { done(null, parseRequestJson(request.method, body as Buffer)); }
   catch (error) { done(error as Error, undefined); }
 });
 
