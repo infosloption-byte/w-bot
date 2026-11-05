@@ -258,3 +258,95 @@ test("foreign workspace cannot permanently remove another tenant's WhatsApp sess
   assert.equal(r.statusCode,404);
   await app.close();
 });
+
+test("owner can permanently remove already-unlinked test connection without JSON body", async () => {
+  const connectionId = "cktb92lxp000007n3qux1329d";
+  const actions: string[] = [];
+  const tx = {
+    customerWhatsAppConnection: {
+      update: async ({ data }: { data: { status: string; active: boolean } }) => {
+        actions.push("revoke"); assert.equal(data.status, "REVOKED"); assert.equal(data.active, false);
+      },
+      delete: async () => { actions.push("delete-connection"); }
+    },
+    group: {
+      updateMany: async () => { actions.push("disable-groups"); },
+      deleteMany: async () => { actions.push("delete-groups"); }
+    },
+    groupActivation: { deleteMany: async () => { actions.push("delete-activations"); } },
+    tenantAudit: { create: async () => { actions.push("audit"); } }
+  };
+  const db = {
+    portalSession: { findUnique: async () => session },
+    customerWhatsAppConnection: {
+      findFirst: async ({ where }: { where: { id: string; tenantId: string } }) => {
+        assert.equal(where.id, connectionId);
+        assert.equal(where.tenantId, user.tenantId);
+        return { id: connectionId, tenantId: user.tenantId, status: "REQUIRES_REPAIR", active: true };
+      }
+    },
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)
+  } as unknown as PrismaClient;
+
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(String(url), cfg.BYON_GATEWAY_URL + "/connections/" + connectionId + "/revoke");
+    assert.equal(options?.method, "POST");
+    actions.push("gateway-revoke");
+    return new Response('{"revoked":true}', { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const app = Fastify();
+  registerByonPortalRoutes(app, db, cfg);
+  try {
+    const result = await app.inject({
+      method: "DELETE",
+      url: "/portal/api/connections/" + connectionId,
+      headers: userHeaders
+    });
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(result.json(), { removed: true });
+    assert.deepEqual(actions, [
+      "revoke", "disable-groups", "gateway-revoke",
+      "delete-activations", "delete-groups", "delete-connection", "audit"
+    ]);
+  } finally {
+    globalThis.fetch = previousFetch;
+    await app.close();
+  }
+});
+
+test("gateway revoke failure leaves connection disabled for safe retry, not falsely removed", async () => {
+  const id = "cktb92lxp000007n3qux1329d";
+  let deleted = false;
+  const tx = {
+    customerWhatsAppConnection: {
+      update: async () => {},
+      delete: async () => { deleted = true; }
+    },
+    group: { updateMany: async () => {}, deleteMany: async () => {} },
+    groupActivation: { deleteMany: async () => {} },
+    tenantAudit: { create: async () => {} }
+  };
+  const db = {
+    portalSession: { findUnique: async () => session },
+    customerWhatsAppConnection: {
+      findFirst: async () => ({ id, tenantId: user.tenantId, status: "REVOKED", active: false })
+    },
+    $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)
+  } as unknown as PrismaClient;
+  const prior = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{"error":"Unavailable"}', { status: 503 });
+  const app = Fastify();
+  registerByonPortalRoutes(app, db, cfg);
+  try {
+    const result = await app.inject({
+      method: "DELETE", url: "/portal/api/connections/" + id, headers: userHeaders
+    });
+    assert.equal(result.statusCode, 202);
+    assert.equal(result.json().pending, true);
+    assert.equal(deleted, false);
+  } finally {
+    globalThis.fetch = prior;
+    await app.close();
+  }
+});
