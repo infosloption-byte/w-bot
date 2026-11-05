@@ -58,6 +58,130 @@ async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   return json as T;
 }
 
+function TranslationPicker({ onActivated, onOpenConnections, onRequestApproval }: {
+  onActivated: () => void; onOpenConnections: () => void; onRequestApproval: () => void
+}) {
+  type Connection = { id: string; label: string; active: boolean; status: string };
+  type Joined = { groupId: string; name: string; activated: boolean;
+    enabled: boolean; adminVerified: boolean };
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionId, setConnectionId] = useState("");
+  const [joined, setJoined] = useState<Joined[]>([]);
+  const [quota, setQuota] = useState<{used:number;limit:number}|null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    void api<{connections:Connection[]}>("/connections").then(r => {
+      if (!mounted) return;
+      const active = r.connections.filter(c => c.active && c.status === "CONNECTED");
+      setConnections(active);
+      setConnectionId(previous => active.some(c => c.id === previous) ?
+        previous : active[0]?.id ?? "");
+    }).catch(e => { if (mounted) setError(String(e)); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+  useEffect(() => {
+    let mounted = true;
+    setJoined([]); setSelected([]); setQuota(null); setConsent(false);
+    if (!connectionId) return;
+    setLoading(true);
+    void api<{groups:Joined[];groupUsage:{used:number;limit:number}}>(
+      "/connections/" + encodeURIComponent(connectionId) + "/groups").then(r => {
+      if (!mounted) return;
+      setJoined(r.groups); setQuota(r.groupUsage);
+    }).catch(e => { if (mounted) setError(e instanceof Error ? e.message : "Group discovery failed"); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [connectionId]);
+  const remaining = quota ? Math.max(0, quota.limit - quota.used) : 0;
+  const available = joined.filter(g => g.adminVerified && !g.activated);
+  const shown = joined.filter(g => g.name.toLowerCase().includes(query.toLowerCase()));
+  async function enable() {
+    if (!connectionId || !consent || !selected.length || selected.length > remaining) return;
+    setBusy(true); setError(""); setSuccess("");
+    try {
+      const result = await api<{activated:number}>("/translation/groups/bulk", {
+        method:"POST", body:JSON.stringify({connectionId,groupIds:selected,consentConfirmed:true})
+      });
+      setSuccess(result.activated + " group(s) enabled. Configure languages below.");
+      setSelected([]); setConsent(false);
+      const updated = await api<{groups:Joined[];groupUsage:{used:number;limit:number}}>(
+        "/connections/" + encodeURIComponent(connectionId) + "/groups");
+      setJoined(updated.groups); setQuota(updated.groupUsage);
+      onActivated();
+    } catch (e) { setError(e instanceof Error ? e.message : "Unable to enable groups"); }
+    finally { setBusy(false); }
+  }
+  return <section className="panel unified-picker">
+    <div className="panel-heading"><div><h3>Choose groups to translate</h3>
+      <p className="muted text-small">No activation code for groups administered by your linked WhatsApp account.</p></div>
+      {quota && <span className="byon-count">{quota.used} / {quota.limit} groups</span>}
+    </div>
+    {error && <p className="alert error" role="alert">{error}</p>}
+    {success && <p className="alert success" role="status">{success}</p>}
+    <div className="unified-picker-section"><strong>1. WhatsApp account</strong>
+      {connections.length ? <div className="alert-session-list">
+        {connections.map(c => <button type="button" key={c.id} aria-pressed={connectionId === c.id}
+          disabled={busy} className={"alert-session" + (connectionId === c.id ? " is-selected" : "")}
+          onClick={() => setConnectionId(c.id)}>{c.label}</button>)}
+      </div> : <p className="muted">{loading ? "Loading accounts…" : "No connected WhatsApp account."}
+        <button type="button" className="text-button" onClick={onOpenConnections}>Connect account</button></p>}
+    </div>
+    {connectionId && <>
+      <div className="unified-picker-section"><strong>2. Select groups</strong>
+        <label className="alert-field">Find group
+          <input type="search" placeholder="Search joined groups" value={query}
+            onChange={e => setQuery(e.target.value)}/>
+        </label>
+        <div className="alert-group-toolbar"><span className="muted">{selected.length} selected</span>
+          <button type="button" className="text-button" disabled={busy || loading}
+            onClick={() => setSelected(available.filter(g => g.name.toLowerCase().includes(query.toLowerCase()))
+              .slice(0,remaining).map(g => g.groupId))}>Select eligible</button>
+          <button type="button" className="text-button" onClick={() => setSelected([])}>Clear</button>
+        </div>
+        <div className="alert-group-list">
+          {loading && <p className="muted">Loading joined groups…</p>}
+          {!loading && !shown.length && <p className="muted">No joined groups found.</p>}
+          {shown.map(g => {
+            const checked = selected.includes(g.groupId);
+            return <label key={g.groupId} className="alert-group-option">
+              <input type="checkbox" checked={g.activated || checked}
+                disabled={busy || g.activated || !g.adminVerified ||
+                  (!checked && selected.length >= remaining)}
+                onChange={e => setSelected(items => e.target.checked ?
+                  [...items.filter(id => id !== g.groupId),g.groupId] :
+                  items.filter(id => id !== g.groupId))}/>
+              <span>{g.name}</span><small>{g.activated ? "Already configured" :
+                g.adminVerified ? "Admin verified" : "Admin approval required"}</small>
+            </label>;
+          })}
+        </div>
+        {joined.some(g => !g.adminVerified && !g.activated) && <p className="muted text-small">
+          Not an admin in a group? <button type="button" className="text-button"
+            onClick={onRequestApproval}>Request group-admin approval</button>
+        </p>}
+      </div>
+      <div className="unified-picker-section"><strong>3. Enable translation</strong>
+        <label className="consent-row"><input type="checkbox" checked={consent}
+          onChange={e => setConsent(e.target.checked)} disabled={busy}/>
+          <span>I administer these groups and members have been informed that W-Bot will send AI-translated replies.</span></label>
+        <button type="button" className="button primary" disabled={busy || loading || !consent ||
+          !selected.length || selected.length > remaining} onClick={() => void enable()}>
+          {busy ? "Enabling…" : "Enable translation for " + selected.length + " group(s)"}
+        </button>
+        <p className="muted text-small">Your platform language defaults apply. Customize them in the group cards below.</p>
+      </div>
+    </>}
+  </section>;
+}
+
 function App() {
   const [me, setMe] = useState<Me | null>(null);
   const sidebar = useSidebar("wbot-customer-sidebar-collapsed");
@@ -375,7 +499,7 @@ function App() {
               (target === "translation" || target === "alerts" ? "overview" :
                 target === "connections" ? "accounts" : "translation"))}/>}
           {view === "translation" && translationTab === "overview" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Manage translated conversations and languages for your approved groups.</p></div><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage connections</button></div>
+            <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Choose groups, select languages, and let W-Bot reply with translations.</p></div><button className="button primary" onClick={() => chooseSubtab("translation","groups")}>Choose translation groups</button></div>
             <div className="metrics">
               <div className="metric"><div className="metric-label">REGISTERED GROUPS <span><Icon name="groups" size={18}/></span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
               <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span><Icon name="chat" size={18}/></span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
@@ -385,7 +509,7 @@ function App() {
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
                   <div className="group-line" key={group.id}><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
-                ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp Connections</button> to begin.</div>}
+                ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Choose groups</button> to begin.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
                 {usage?.recent.length ? usage.recent.map(item =>
@@ -397,7 +521,10 @@ function App() {
 
           {view === "translation" && translationTab === "groups" && <>
             <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Manage translation languages and approved groups connected to your WhatsApp sessions.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}><Icon name="refresh" size={16}/>{refreshingGroups ? "Refreshing…" : "Refresh groups"}</button><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp accounts</button></div></div>
-            {!groups.length && <div className="panel empty large">No translation groups activated yet. Link your WhatsApp account and request group activation.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage WhatsApp accounts</button></p></div>}
+            {!groups.length && <div className="panel empty large">No translation groups yet. Choose groups above to begin.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Connect WhatsApp</button></p></div>}
+            <TranslationPicker onActivated={() => void refreshGroups().catch(reportError)}
+              onOpenConnections={() => chooseSubtab("connections","accounts")}
+              onRequestApproval={() => chooseSubtab("connections","pairing")}/>
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
                 <div className="group-title"><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><h3>{group.name}</h3><small>{group.connection
@@ -450,6 +577,7 @@ function App() {
               <p className="muted">Link a WhatsApp account once and manage its connections for the services you subscribe to.</p>
             </div></div>
             <ByonConnections mode={connectionTab}
+              onManageAlerts={() => chooseSubtab("alerts", "groups")}
               onNavigate={tab => chooseSubtab("connections", tab)}
               onManageGroups={() => {
                 chooseSubtab("translation","groups"); void refreshGroups().catch(reportError);

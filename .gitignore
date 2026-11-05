@@ -11,3 +11,5 @@ coverage/
 secrets/
 *.auth-backup
 vault-backups/
+# Host-local operational backups (may contain WhatsApp session credentials)
+/backups/

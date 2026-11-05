@@ -194,8 +194,9 @@ export function SmartAlerts({
     </section>}
     {(section === "groups" || section === "searches") && <div className="alert-columns alert-page-grid">
       {section === "groups" && <section className="panel">
-        <div className="panel-heading"><h3>Choose groups to monitor</h3><span className="muted text-small">Read-only</span></div>
-        <p className="muted text-small">Choose only groups that you are authorized to monitor. No private chats or historical messages.</p>
+        <div className="panel-heading"><h3>Choose groups for Smart Alerts</h3><span className="byon-count">{usage?.groups ?? 0} monitored</span></div>
+        <p className="muted text-small">Select the groups to watch. Monitoring is private and does not send replies into these groups.</p>
+        <div className="unified-picker-heading">1. Choose connected WhatsApp account</div>
         <div className="alert-session-list">
           {connections.map(c => <button key={c.id} type="button"
             aria-pressed={connectionId === c.id} disabled={!licensed}
@@ -204,6 +205,7 @@ export function SmartAlerts({
         </div>
         {!connections.length && <p className="muted">No connected sessions available.</p>}
         {connectionId && <>
+          <div className="unified-picker-heading">2. Select groups to monitor</div>
           <label className="alert-field">Find joined groups
             <input type="search" placeholder="Find a group" value={groupSearch}
               onChange={e => setGroupSearch(e.target.value)}/>
@@ -233,14 +235,16 @@ export function SmartAlerts({
               </label>;
             })}
           </div>
+          <div className="unified-picker-heading">3. Confirm and enable monitoring</div>
           <label className="consent-row"><input type="checkbox" checked={consent} disabled={!licensed}
             onChange={e => setConsent(e.target.checked)}/>
             <span>I have authority to monitor these groups and participants have been informed that selected messages are analyzed by an external AI provider.</span>
           </label>
           <button type="button" className="button primary"
             disabled={!licensed || !selectedGroups.length || !consent || busy}
-            onClick={() => void addGroups()}>Activate monitoring for {selectedGroups.length} selected group(s)</button>
+            onClick={() => void addGroups()}>Monitor {selectedGroups.length} selected group(s)</button>
         </>}
+        <div className="unified-picker-heading">Currently monitored groups</div>
         <div className="alert-items">{sources.map(source=><div className="alert-item" key={source.id}>
           <div><strong>{source.name}</strong><small>{source.enabled?"Monitoring":"Paused"}</small></div>
           <div className="alert-actions">
@@ -255,8 +259,8 @@ export function SmartAlerts({
         </div>)}</div>
       </section>}
       {section === "searches" && <section className="panel">
-        <div className="panel-heading"><h3>Intelligent searches</h3><span className="muted text-small">Private searches</span></div>
-        <p className="muted text-small">Create a search with your own labels and values. AI interprets formatted or natural-language messages and checks every requirement.</p>
+        <div className="panel-heading"><h3>What should W-Bot find?</h3><span className="muted text-small">Private searches</span></div>
+        <p className="muted text-small">Name your search and describe what matters. W-Bot checks incoming messages in your monitored groups, even when messages are not formatted.</p>
         <form className="alert-form" onSubmit={e => void createRule(e)}>
           <label className="alert-field">Search name
             <input required minLength={2} maxLength={100} value={ruleName}
@@ -308,17 +312,17 @@ export function SmartAlerts({
     {section === "inbox" && <SmartAlertsInbox/>}
     {section === "overview" && <section className="home-service-grid">
       <article className="home-service-card"><div className="eyebrow">STEP 1</div>
-        <h3>Monitored WhatsApp groups</h3>
+        <h3>Choose groups to monitor</h3>
         <p>Choose which authorized groups Smart Alerts should analyze. Each group can be paused independently.</p>
         <button className="button secondary" onClick={() => onNavigate?.("groups")}>
-          Manage {usage?.groups ?? 0} groups <span aria-hidden="true">→</span>
+          {usage?.groups ? "Manage " + usage.groups + " groups" : "Choose groups"} <span aria-hidden="true">→</span>
         </button>
       </article>
       <article className="home-service-card"><div className="eyebrow">STEP 2</div>
-        <h3>Intelligent searches</h3>
+        <h3>Describe what to find</h3>
         <p>Describe what matters to you using flexible labels and values, for any industry.</p>
         <button className="button secondary" onClick={() => onNavigate?.("searches")}>
-          Manage {usage?.rules ?? 0} searches <span aria-hidden="true">→</span>
+          {usage?.rules ? "Manage " + usage.rules + " searches" : "Create a search"} <span aria-hidden="true">→</span>
         </button>
       </article>
       <article className="home-service-card"><div className="eyebrow">STEP 3</div>

@@ -40,9 +40,10 @@ const statusLabel = (status: string) => ({
 } as Record<string, string>)[status] ?? status.toLowerCase().replaceAll("_", " ");
 
 export function ByonConnections({
-  onManageGroups, mode = "accounts", onNavigate
+  onManageGroups, onManageAlerts, mode = "accounts", onNavigate
 }: {
   onManageGroups?: () => void;
+  onManageAlerts?: () => void;
   mode?: "accounts" | "add" | "pairing";
   onNavigate?: (tab: "accounts" | "add" | "pairing") => void;
 }) {
@@ -372,9 +373,16 @@ export function ByonConnections({
                 <p>Your account is linked. Choose Translation groups or monitored groups for Smart Alerts separately.</p></div>
             </div>
             <div className="byon-next">
-              <div className="eyebrow">03 / ACTIVATE A GROUP</div>
-              <h3>Optional: Translation group activation</h3>
-              <p className="muted text-small">Existing groups don't need a new code. To monitor groups privately, use Smart Alerts instead.</p>
+              <div className="eyebrow">03 / CHOOSE A SERVICE</div>
+              <h3>Your WhatsApp account is ready</h3>
+              <p className="muted text-small">Choose groups inside Translation or Smart Alerts. No code is needed when this number is a verified group administrator.</p>
+              <div className="byon-service-links">
+                <button className="button primary" type="button" onClick={onManageGroups}>Choose translation groups</button>
+                <button className="button secondary" type="button" onClick={onManageAlerts}>Choose monitored groups</button>
+              </div>
+              <details className="byon-advanced">
+                <summary>Advanced: Group-admin approval code</summary>
+                <p className="muted text-small">If your connected number is not an administrator of a group, ask a verified group admin to approve outbound translation using a one-time command.</p>
               <div className={"byon-group-quota" + (groupsFull ? " is-full" : "")} role="status">
                 <span>Plan group slots</span>
                 <strong>{groupSlotsUsed} / {groupSlotsLimit}</strong>
@@ -407,7 +415,8 @@ export function ByonConnections({
                 </button>
               </div>}
               <button type="button" className="text-button byon-manage-link"
-                onClick={onManageGroups}>View my activated groups →</button>
+                onClick={onManageGroups}>Manage translation groups</button>
+              </details>
             </div>
           </>}
           <div className="byon-footer-actions">
