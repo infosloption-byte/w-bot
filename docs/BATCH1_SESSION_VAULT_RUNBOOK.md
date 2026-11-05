@@ -94,7 +94,8 @@ sudo docker compose -f docker-compose.yml -f docker-compose.byon-vault.yml confi
 
 sudo docker compose -f docker-compose.yml -f docker-compose.byon-vault.yml \
   --profile vault-migrate run --rm --no-deps --entrypoint sh byon-vault-migrate \
-  -c 'test -r /run/secrets/kms_credentials && echo "KMS credential file readable"; \
+  -c 'set -e; test -r /run/secrets/kms_credentials; \
+      echo "KMS credential file readable"; \
       grep " /tmp " /proc/mounts | cut -d" " -f2-4'
 ~~~
 
