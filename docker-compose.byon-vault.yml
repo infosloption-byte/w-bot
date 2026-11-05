@@ -17,7 +17,11 @@ services:
     cap_drop: [ALL]
     pids_limit: 256
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    # Docker Compose v5.6.0 treats bare noexec/nosuid tokens in this
+    # short-form option list as separate mounts. Use its supported tmpfs
+    # path form; Docker's default tmpfs mount applies nosuid/noexec.
+    tmpfs:
+      - /tmp
 
   byon-vault-migrate:
     profiles: ["vault-migrate"]
@@ -41,7 +45,11 @@ services:
     cap_drop: [ALL]
     pids_limit: 256
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    # Docker Compose v5.6.0 treats bare noexec/nosuid tokens in this
+    # short-form option list as separate mounts. Use its supported tmpfs
+    # path form; Docker's default tmpfs mount applies nosuid/noexec.
+    tmpfs:
+      - /tmp
 
 volumes:
   wbot_byon_vault:
