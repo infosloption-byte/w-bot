@@ -72,6 +72,36 @@ git switch main
 
 The build executes all gateway tests, including encryption/decryption, data corruption, cross-connection isolation, and migration. Stop if it fails. Docker Compose v2.24+ is required for the !override volume directive in docker-compose.byon-vault.yml.
 
+## Non-disruptive KMS credential-mount preflight
+
+Before any migration or gateway stop, validate the **actual Docker runtime mount** using the
+same migration image and vault Compose overlay. On 2026-11-05, Docker Compose v5.6.0
+accepted the older short-form `tmpfs: [/tmp:rw,noexec,nosuid,size=16m]` during
+`config -q`, but container creation failed with
+`invalid mount path: 'noexec' mount path must be absolute`.
+
+The corrected override uses **long-form type: tmpfs volume mounts** for both services
+with `tmpfs.size: 16777216` (16 MiB) and default Docker noexec/nosuid options.
+This avoids the unsupported comma-separated mount syntax without dropping the
+size limit.
+
+These commands are **preflight only**. They mount legacy auth read-only and do not
+start, stop, or recreate the production BYON gateway:
+
+~~~bash
+cd /opt/apps/w-bot || exit 1
+sudo docker compose -f docker-compose.yml -f docker-compose.byon-vault.yml config -q
+
+sudo docker compose -f docker-compose.yml -f docker-compose.byon-vault.yml \
+  --profile vault-migrate run --rm --no-deps --entrypoint sh byon-vault-migrate \
+  -c 'test -r /run/secrets/kms_credentials && echo "KMS credential file readable"; \
+      grep " /tmp " /proc/mounts | cut -d" " -f2-4'
+~~~
+
+Confirm that `/tmp` is a tmpfs mount and that the credential file is readable
+without printing the file contents. **Do not run --inventory, --migrate, or --verify
+until the cutover maintenance window and encrypted backup are approved.**
+
 ## 2 — Production cutover (ONLY after PR merge and AWS setup)
 
 Plan a maintenance window: BYON Translation and Smart Alerts will briefly stop. The shared W-Bot Translation gateway and API should remain running.
