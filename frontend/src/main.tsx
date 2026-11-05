@@ -397,7 +397,7 @@ function App() {
 
           {view === "translation" && translationTab === "groups" && <>
             <div className="page-heading"><div><div className="eyebrow">GROUP MANAGEMENT</div><h1>My WhatsApp groups</h1><p className="muted">Manage translation languages and approved groups connected to your WhatsApp sessions.</p></div><div className="group-page-actions"><button type="button" className="button secondary" disabled={refreshingGroups} onClick={() => void manualGroupRefresh()}><Icon name="refresh" size={16}/>{refreshingGroups ? "Refreshing…" : "Refresh groups"}</button><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp accounts</button></div></div>
-            {!groups.length && <div className="panel empty large">No translation groups activated yet. Link your WhatsApp account and request group activation.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage WhatsApp accounts</button></p></div>}
+            {!groups.length && <div className="panel empty large">No translation groups activated yet. Link your WhatsApp account and choose a group from your connected account.<p><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage WhatsApp accounts</button></p></div>}
             <div className="group-cards">{groups.map(group =>
               <section key={group.id} className="panel group-card">
                 <div className="group-title"><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><h3>{group.name}</h3><small>{group.connection
