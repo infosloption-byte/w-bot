@@ -62,3 +62,17 @@ test("settings pages, dashboard onboarding and shared theme are wired in both po
     assert.ok(theme.includes(token), token);
   assert.ok(pages.includes(".alert-page-grid"));
 });
+
+test("Translation and Alerts share the simple connected-account group-selection flow", () => {
+  assert.match(customer, /function TranslationPicker/);
+  assert.match(customer, /"\/translation\/groups\/bulk"/);
+  assert.match(customer, /Choose groups to translate/);
+  assert.match(customer, /Admin approval required/);
+  assert.match(customer, /consentConfirmed:true/);
+  assert.match(alerts, /1\. Choose connected WhatsApp account/);
+  assert.match(alerts, /2\. Select groups to monitor/);
+  assert.match(alerts, /3\. Confirm and enable monitoring/);
+  assert.match(connections, /Advanced: Group-admin approval code/);
+  assert.match(connections, /Choose translation groups/);
+  assert.match(connections, /Choose monitored groups/);
+});
