@@ -499,7 +499,7 @@ function App() {
               (target === "translation" || target === "alerts" ? "overview" :
                 target === "connections" ? "accounts" : "translation"))}/>}
           {view === "translation" && translationTab === "overview" && <>
-            <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Manage translated conversations and languages for your approved groups.</p></div><button className="button primary" onClick={() => chooseSubtab("connections","accounts")}>Manage connections</button></div>
+            <div className="page-heading"><div><div className="eyebrow">GROUP TRANSLATION</div><h1>Translation overview</h1><p className="muted">Choose groups, select languages, and let W-Bot reply with translations.</p></div><button className="button primary" onClick={() => chooseSubtab("translation","groups")}>Choose translation groups</button></div>
             <div className="metrics">
               <div className="metric"><div className="metric-label">REGISTERED GROUPS <span><Icon name="groups" size={18}/></span></div><div className="metric-value">{groups.length}<small> / {me.limits.groups}</small></div><div className="metric-foot">Your connected groups</div></div>
               <div className="metric"><div className="metric-label">MESSAGES THIS MONTH <span><Icon name="chat" size={18}/></span></div><div className="metric-value">{usage?.messages ?? 0}</div><div className="metric-foot">Unlimited text translations · usage monitored</div></div>
@@ -509,7 +509,7 @@ function App() {
               <section className="panel"><div className="panel-heading"><h3>Your groups</h3><button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Manage all →</button></div>
                 {groups.length ? groups.slice(0, 5).map(group =>
                   <div className="group-line" key={group.id}><div className="group-icon"><Icon name="groups" size={20}/></div><div className="grow"><strong>{group.name}</strong><small>{group.targetLanguages.filter(code => languages.some(lang => lang.code === code)).length} enabled languages · {group.connection ? (group.connection.kind === "PERSONAL" ? "Personal · " : "Business · ") + group.connection.label : "Shared W-Bot"}</small></div><span className={"status " + (group.enabled ? "on" : "")}>{group.enabled ? "Active" : "Paused"}</span></div>
-                ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("connections","accounts")}>WhatsApp Connections</button> to begin.</div>}
+                ) : <div className="empty">No translation groups yet. Open <button className="text-button" onClick={() => chooseSubtab("translation","groups")}>Choose groups</button> to begin.</div>}
               </section>
               <section className="panel"><div className="panel-heading"><h3>Recent activity</h3><span className="muted text-small">This month</span></div>
                 {usage?.recent.length ? usage.recent.map(item =>
@@ -577,6 +577,7 @@ function App() {
               <p className="muted">Link a WhatsApp account once and manage its connections for the services you subscribe to.</p>
             </div></div>
             <ByonConnections mode={connectionTab}
+              onManageAlerts={() => chooseSubtab("alerts", "groups")}
               onNavigate={tab => chooseSubtab("connections", tab)}
               onManageGroups={() => {
                 chooseSubtab("translation","groups"); void refreshGroups().catch(reportError);
