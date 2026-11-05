@@ -17,6 +17,12 @@ const registration = z.object({
 }).strict();
 const pairing = z.object({ phoneNumber: z.string().regex(/^[1-9][0-9]{7,14}$/).optional() }).strict();
 const activationRequest = z.object({ connectionId: z.string(), consentConfirmed: z.literal(true) }).strict();
+const directTranslationGroups = z.object({
+  connectionId: z.string().refine(isConnectionId),
+  groupIds: z.array(z.string().refine(isWebGroupId)).min(1).max(50)
+    .refine(ids => new Set(ids).size === ids.length, "Select each group once"),
+  consentConfirmed: z.literal(true)
+}).strict();
 const groupProof = z.object({
   connectionId: z.string(), groupId: z.string().refine(isWebGroupId),
   groupName: z.string().trim().min(1).max(191), code: z.string().regex(/^[A-F0-9]{16}$/i),
@@ -163,7 +169,9 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
     try {
       const res = await byonRequest(cfg, "/connections/" + c.id + "/groups");
       if (!res.ok) return reply.code(503).send({ error: "Connection unavailable" });
-      const data = await res.json() as { groups?: Array<{ groupId: string; name: string }> };
+      const data = await res.json() as {
+        groups?: Array<{ groupId: string; name: string; adminVerified?: boolean }>
+      };
       const discovered = (data.groups ?? []).filter(g => isWebGroupId(g.groupId)).slice(0, 200);
       const [managed, limits, count] = await Promise.all([
         prisma.group.findMany({
@@ -177,12 +185,103 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
       return {
         groups: discovered.map(g => {
           const registered = known.get(g.groupId);
-          return { ...g, activated: !!registered, enabled: registered?.enabled ?? false,
+          return { ...g, adminVerified: g.adminVerified === true,
+            activated: !!registered, enabled: registered?.enabled ?? false,
             managedGroupId: registered?.id ?? null };
         }),
         groupUsage: { used: count, limit: limits.groups }
       };
     } catch { return reply.code(503).send({ error: "Group discovery unavailable" }); }
+  });
+
+  // Direct onboarding for groups administered by the linked WhatsApp account.
+  // The independent Smart Alerts monitoring flow does not grant send permission.
+  // Non-admin members must use the existing in-group admin activation proof.
+  app.post("/portal/api/translation/groups/bulk", async (req, reply) => {
+    if (!requireMutationHeader(req, reply)) return;
+    const user = await requirePortalAuth(prisma, req, reply);
+    if (!user) return;
+    if (user.role === "VIEWER") return reply.code(403).send({ error: "Workspace admin required" });
+    const input = directTranslationGroups.parse(req.body);
+    if (cfg.BYON_GATEWAY_ENABLED !== "true")
+      return reply.code(503).send({ error: "WhatsApp gateway unavailable" });
+    if (!allowAttempt("byon-translation-select:" + user.tenantId, 12, 900_000))
+      return reply.code(429).send({ error: "Too many group changes. Try again later." });
+    const conn = await prisma.customerWhatsAppConnection.findFirst({
+      where: { id: input.connectionId, tenantId: user.tenantId,
+        active: true, status: "CONNECTED" }
+    });
+    if (!conn) return reply.code(404).send({ error: "Connected WhatsApp account not found" });
+    if (!connectionTypeAllowed(await policy(prisma), conn.kind))
+      return reply.code(403).send({ error: "WhatsApp account type disabled" });
+
+    // Re-fetch authoritative group membership and admin status from the gateway
+    // for EVERY mutation. Never trust the browser's group name or admin flag.
+    let discovered: Array<{ groupId: string; name: string; adminVerified?: boolean }>;
+    try {
+      const response = await byonRequest(cfg, "/connections/" + conn.id + "/groups");
+      if (!response.ok) return reply.code(503).send({ error: "Could not verify group permissions" });
+      const body = await response.json() as {
+        groups?: Array<{ groupId: string; name: string; adminVerified?: boolean }>
+      };
+      discovered = body.groups ?? [];
+    } catch { return reply.code(503).send({ error: "Could not verify group permissions" }); }
+    const eligible = new Map(discovered
+      .filter(g => isWebGroupId(g.groupId) && g.adminVerified === true && g.name?.trim())
+      .map(g => [g.groupId, g.name.trim().slice(0, 191)]));
+    if (!input.groupIds.every(id => eligible.has(id)))
+      return reply.code(403).send({
+        error: "The linked WhatsApp account must be a verified group administrator. Ask a group admin to approve activation with a code instead."
+      });
+
+    const defaults = defaultGroupLanguages(await loadEnabledLanguages(prisma));
+    if (!defaults.length) return reply.code(503).send({ error: "No translation languages enabled" });
+    const result = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM Tenant WHERE id = ${user.tenantId} FOR UPDATE`;
+      const plan = await tx.tenantSubscription.findUnique({ where: { tenantId: user.tenantId } });
+      if (plan && (!planActive(plan) || plan.translationEnabled === false))
+        return "INACTIVE" as const;
+      const key = connectionKey(conn.id);
+      const existing = await tx.group.findMany({
+        where: { connectionKey: key, whatsappGroupId: { in: input.groupIds } },
+        select: { id: true, tenantId: true, whatsappGroupId: true }
+      });
+      if (existing.some(group => group.tenantId !== user.tenantId))
+        return "FORBIDDEN" as const;
+      const known = new Map(existing.map(group => [group.whatsappGroupId, group]));
+      const used = await tx.group.count({ where: { tenantId: user.tenantId } });
+      const maxGroups = commercialLimits(plan?.planCode ?? "PILOT", {
+        groupLimit: plan?.groupLimit ?? cfg.SAAS_MAX_GROUPS,
+        whatsappConnectionLimit: plan?.whatsappConnectionLimit ?? 0
+      }).groups;
+      if (used + input.groupIds.filter(id => !known.has(id)).length > maxGroups)
+        return "LIMIT" as const;
+      const now = new Date();
+      for (const id of input.groupIds) {
+        const name = eligible.get(id)!;
+        const current = known.get(id);
+        const group = current
+          ? await tx.group.update({ where: { id: current.id },
+              data: { enabled: true, claimedAt: now, consentAt: now, name } })
+          : await tx.group.create({ data: {
+              connectionId: conn.id, connectionKey: key, whatsappGroupId: id,
+              tenantId: user.tenantId, gateway: "WEB", name, enabled: true,
+              claimedAt: now, consentAt: now, targetLanguages: defaults
+            } });
+        await tx.tenantAudit.create({ data: {
+          tenantId: user.tenantId, actorId: user.userId,
+          groupId: group.id, action: "CUSTOMER_ADMIN_GROUP_SELECTED"
+        } });
+      }
+      return { activated: input.groupIds.length };
+    });
+    if (result === "INACTIVE")
+      return reply.code(403).send({ error: "Enable an active Translation subscription" });
+    if (result === "FORBIDDEN")
+      return reply.code(403).send({ error: "Group ownership conflict" });
+    if (result === "LIMIT")
+      return reply.code(409).send({ error: "Translation group plan limit reached" });
+    return reply.code(201).send(result);
   });
 
   app.post("/portal/api/connections/activations", async (req, reply) => {
