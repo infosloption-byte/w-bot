@@ -410,9 +410,15 @@ const server = createServer(async (req, res) => {
     if (!entry.connected || !entry.socket) return respond(res,503,{error:"Not connected"});
     if (req.method === "GET" && action === "groups") {
       const participating = await entry.socket.groupFetchAllParticipating();
+      // A connected number may enable outbound translation directly ONLY
+      // when the gateway can verify that it is a group administrator.
+      // Checking the group list alone is insufficient consent for sending.
+      const ownerIds = await senderJids(entry.socket, { key: { fromMe: true } });
       return respond(res,200,{groups:Object.values(participating)
         .filter(g => isGroupJid(g.id))
-        .map(g => ({ groupId:g.id,name:g.subject })).slice(0,200)});
+        .map(g => ({ groupId:g.id,name:g.subject,
+          adminVerified: Array.isArray(g.participants) &&
+            isVerifiedGroupAdmin(g.participants, ownerIds) })).slice(0,200)});
     }
     // Separate Smart Alerts notification pathway: no quoted messages,
     // no group translation involvement and no group-creation authority.
