@@ -160,3 +160,24 @@
 @media (prefers-reduced-motion:reduce){
   .byon-number-item{transition:none}
 }
+
+
+/* Shared, readable three-step setup for Translation and Smart Alerts. */
+.unified-picker{display:grid;gap:15px;min-width:0}
+.unified-picker .panel-heading{align-items:start;flex-wrap:wrap;gap:12px;margin-bottom:0}
+.unified-picker-section{display:grid;gap:12px;min-width:0;padding:15px 0;border-top:1px solid var(--c-border)}
+.unified-picker-section>strong,.unified-picker-heading{display:block;font-size:13px;font-weight:750;color:var(--c-text);margin:6px 0 10px}
+.unified-picker-section .alert-group-list{max-height:300px;overflow:auto}
+.unified-picker-section .alert-group-option{min-width:0}
+.unified-picker-section .alert-group-option span{min-width:0;overflow-wrap:anywhere}
+.unified-picker-section .button.primary{justify-self:start;min-height:44px;max-width:100%}
+.byon-service-links{display:flex;flex-wrap:wrap;gap:10px}
+.byon-service-links .button{min-height:44px}
+.byon-advanced{padding:12px 14px;border:1px solid var(--c-border);border-radius:var(--r-md);background:var(--c-surface-2);min-width:0}
+.byon-advanced summary{cursor:pointer;color:var(--c-text);font-weight:700;font-size:13px;line-height:1.5}
+.byon-advanced[open]{display:grid;gap:12px}
+.byon-advanced summary:focus-visible{outline:2px solid var(--c-focus);outline-offset:3px}
+@media(max-width:640px){
+  .unified-picker-section .alert-session-list,.byon-service-links{display:grid;grid-template-columns:1fr}
+  .unified-picker-section .button.primary,.byon-service-links .button{width:100%}
+}
