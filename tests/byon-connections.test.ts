@@ -400,7 +400,7 @@ test("direct Translation group setup enables only verified group-admin selection
     languageCatalog:{findMany:async()=>[
       {code:"en",name:"English"},{code:"si",name:"Sinhala"},{code:"he",name:"Hebrew"}
     ]},
-    $transaction:async(fn:(tx:typeof tx)=>Promise<unknown>)=>fn(tx)
+    $transaction:async(fn:(client:typeof tx)=>Promise<unknown>)=>fn(tx)
   } as unknown as PrismaClient;
   const previous=globalThis.fetch;
   globalThis.fetch=async()=>new Response(JSON.stringify({groups:[
