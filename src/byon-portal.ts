@@ -143,6 +143,12 @@ export function registerByonPortalRoutes(app: FastifyInstance, prisma: PrismaCli
     });
     if (!c) return reply.code(404).send({ error: "Connection not found" });
     reply.header("cache-control", "private, no-store");
+    // Pairing credentials are not read-only information: QR and pairing codes
+    // can authorize a new linked device. Restrict gateway secret retrieval to
+    // workspace OWNER/ADMIN and return DB-only status to VIEWER members.
+    if (user.role === "VIEWER") {
+      return { connection: c, pairingCode: null, qrDataUrl: null, pairExpiresAt: null };
+    }
     try {
       const res = await byonRequest(cfg, "/connections/" + c.id + "/status");
       if (res.ok) {
