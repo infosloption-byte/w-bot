@@ -78,6 +78,90 @@ test("customer A cannot poll customer B pairing QR or code",async()=>{
   assert.equal(response.statusCode,404);
   await app.close();
 });
+test("VIEWER sees tenant-scoped connection status but cannot retrieve pairing secrets", async () => {
+  const id = "cktb92lxp000007n3qux1329d";
+  const viewerSession = {
+    ...session,
+    user: {
+      ...session.user,
+      memberships: [{
+        tenantId: user.tenantId, role: "VIEWER", tenant: { name: user.tenantName }
+      }]
+    }
+  };
+  const db = {
+    portalSession: { findUnique: async () => viewerSession },
+    customerWhatsAppConnection: {
+      findFirst: async ({ where }: { where: { id: string; tenantId: string; active: boolean } }) => {
+        assert.deepEqual(where, { id, tenantId: user.tenantId, active: true });
+        return { id, label: "Test account", kind: "PERSONAL", status: "PAIRING", phoneLast4: null };
+      }
+    }
+  } as unknown as PrismaClient;
+  let gatewayCalled = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    gatewayCalled = true;
+    return new Response(JSON.stringify({
+      status: "PAIRING", qrDataUrl: "data:image/png;base64,synthetic",
+      pairingCode: "12345678", pairExpiresAt: Date.now() + 60_000
+    }), { status: 200 });
+  };
+  const app = Fastify();
+  registerByonPortalRoutes(app, db, cfg);
+  try {
+    const response = await app.inject({
+      method: "GET", url: "/portal/api/connections/" + id + "/status", headers: userHeaders
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "private, no-store");
+    assert.equal(response.json().connection.status, "PAIRING");
+    assert.equal(response.json().qrDataUrl, null);
+    assert.equal(response.json().pairingCode, null);
+    assert.equal(response.json().pairExpiresAt, null);
+    assert.equal(gatewayCalled, false, "VIEWER request must never fetch QR/pairing secrets");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test("workspace OWNER can retrieve pairing secrets for tenant-owned connection", async () => {
+  const id = "cktb92lxp000007n3qux1329d";
+  const db = {
+    portalSession: { findUnique: async () => session },
+    customerWhatsAppConnection: { findFirst: async ({ where }: {
+      where: { id: string; tenantId: string; active: boolean }
+    }) => {
+      assert.deepEqual(where, { id, tenantId: user.tenantId, active: true });
+      return { id, label: "Test account", kind: "PERSONAL", status: "PAIRING", phoneLast4: null };
+    } }
+  } as unknown as PrismaClient;
+  let gatewayCalled = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    gatewayCalled = true;
+    return new Response(JSON.stringify({
+      status: "PAIRING", qrDataUrl: "data:image/png;base64,synthetic",
+      pairingCode: "12345678", pairExpiresAt: Date.now() + 60_000
+    }), { status: 200 });
+  };
+  const app = Fastify();
+  registerByonPortalRoutes(app, db, cfg);
+  try {
+    const response = await app.inject({
+      method: "GET", url: "/portal/api/connections/" + id + "/status", headers: userHeaders
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().pairingCode, "12345678");
+    assert.equal(response.json().qrDataUrl, "data:image/png;base64,synthetic");
+    assert.equal(gatewayCalled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
 test("customer B cannot generate a pairing session belonging to customer A",async()=>{
   const db={
     portalSession:{findUnique:async()=>session},
